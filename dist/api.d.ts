@@ -39,7 +39,8 @@ export declare class NoLongerEvilAPI {
     private readonly baseUrl;
     private readonly apiKey;
     private readonly log;
-    constructor(apiKey: string, log: Logger);
+    private readonly isHttps;
+    constructor(apiKey: string, log: Logger, serverUrl?: string);
     private request;
     getDevices(): Promise<ApiDevice[]>;
     getDeviceStatus(deviceId: string): Promise<DeviceStatusResponse>;

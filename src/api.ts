@@ -1,5 +1,6 @@
 import { Logger } from 'homebridge';
 import * as https from 'https';
+import * as http from 'http';
 
 // API Response Types
 export interface ApiDevice {
@@ -42,14 +43,22 @@ export interface ThermostatState {
   name: string;
 }
 
+const HOSTED_API_URL = 'https://nolongerevil.com/api/v1';
+
 export class NoLongerEvilAPI {
-  private readonly baseUrl = 'https://nolongerevil.com/api/v1';
+  private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly log: Logger;
+  private readonly isHttps: boolean;
 
-  constructor(apiKey: string, log: Logger) {
+  constructor(apiKey: string, log: Logger, serverUrl?: string) {
+    // Use custom server URL if provided, otherwise use hosted API
+    this.baseUrl = serverUrl ? serverUrl.replace(/\/$/, '') : HOSTED_API_URL;
     this.apiKey = apiKey;
     this.log = log;
+    this.isHttps = this.baseUrl.startsWith('https://');
+
+    this.log.debug(`Using API URL: ${this.baseUrl}`);
   }
 
   private request<T>(
@@ -63,9 +72,9 @@ export class NoLongerEvilAPI {
 
       this.log.debug(`API Request: ${method} ${fullUrl}`);
 
-      const options: https.RequestOptions = {
+      const options: http.RequestOptions = {
         hostname: url.hostname,
-        port: 443,
+        port: url.port || (this.isHttps ? 443 : 80),
         path: url.pathname + url.search,
         method,
         headers: {
@@ -75,7 +84,9 @@ export class NoLongerEvilAPI {
         },
       };
 
-      const req = https.request(options, (res) => {
+      const client = this.isHttps ? https : http;
+
+      const req = client.request(options, (res) => {
         let data = '';
         res.on('data', (chunk) => {
           data += chunk;

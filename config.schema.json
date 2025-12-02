@@ -2,7 +2,7 @@
   "pluginAlias": "NoLongerEvilNest",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Homebridge plugin for NoLongerEvil Nest thermostats. Get your API key from your [NoLongerEvil account settings](https://nolongerevil.com/settings).",
+  "headerDisplay": "Homebridge plugin for NoLongerEvil Nest thermostats. Works with both the hosted service and self-hosted installations.",
   "footerDisplay": "For API documentation, see [NoLongerEvil API Docs](https://docs.nolongerevil.com/api-reference/introduction).",
   "schema": {
     "type": "object",
@@ -20,6 +20,12 @@
         "description": "Your NoLongerEvil API key. Create one in Settings > API Keys with 'read' and 'write' scopes.",
         "required": true
       },
+      "serverUrl": {
+        "title": "Server URL (Optional)",
+        "type": "string",
+        "placeholder": "http://192.168.1.100:3000/api/v1",
+        "description": "Only set this if using a self-hosted NoLongerEvil server. Leave empty to use the hosted service (nolongerevil.com)."
+      },
       "pollInterval": {
         "title": "Poll Interval (seconds)",
         "type": "integer",
@@ -34,6 +40,15 @@
   "layout": [
     "name",
     "apiKey",
-    "pollInterval"
+    {
+      "type": "fieldset",
+      "title": "Advanced Settings",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "serverUrl",
+        "pollInterval"
+      ]
+    }
   ]
 }

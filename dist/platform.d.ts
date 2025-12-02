@@ -2,6 +2,7 @@ import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, 
 import { NoLongerEvilAPI } from './api';
 export interface NoLongerEvilConfig extends PlatformConfig {
     apiKey?: string;
+    serverUrl?: string;
     pollInterval?: number;
 }
 export declare class NoLongerEvilPlatform implements DynamicPlatformPlugin {

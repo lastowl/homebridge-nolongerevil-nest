@@ -14,6 +14,7 @@ import { NestThermostatAccessory } from './thermostatAccessory';
 
 export interface NoLongerEvilConfig extends PlatformConfig {
   apiKey?: string;
+  serverUrl?: string;
   pollInterval?: number;
 }
 
@@ -42,9 +43,13 @@ export class NoLongerEvilPlatform implements DynamicPlatformPlugin {
       return;
     }
 
-    this.api_client = new NoLongerEvilAPI(config.apiKey, log);
+    this.api_client = new NoLongerEvilAPI(config.apiKey, log, config.serverUrl);
 
-    this.log.info('NoLongerEvil platform initialized');
+    if (config.serverUrl) {
+      this.log.info(`NoLongerEvil platform initialized (self-hosted: ${config.serverUrl})`);
+    } else {
+      this.log.info('NoLongerEvil platform initialized (using hosted API)');
+    }
 
     // Wait for Homebridge to finish loading cached accessories
     this.api.on('didFinishLaunching', () => {

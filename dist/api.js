@@ -35,13 +35,20 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NoLongerEvilAPI = void 0;
 const https = __importStar(require("https"));
+const http = __importStar(require("http"));
+const HOSTED_API_URL = 'https://nolongerevil.com/api/v1';
 class NoLongerEvilAPI {
-    baseUrl = 'https://nolongerevil.com/api/v1';
+    baseUrl;
     apiKey;
     log;
-    constructor(apiKey, log) {
+    isHttps;
+    constructor(apiKey, log, serverUrl) {
+        // Use custom server URL if provided, otherwise use hosted API
+        this.baseUrl = serverUrl ? serverUrl.replace(/\/$/, '') : HOSTED_API_URL;
         this.apiKey = apiKey;
         this.log = log;
+        this.isHttps = this.baseUrl.startsWith('https://');
+        this.log.debug(`Using API URL: ${this.baseUrl}`);
     }
     request(method, path, body) {
         return new Promise((resolve, reject) => {
@@ -50,7 +57,7 @@ class NoLongerEvilAPI {
             this.log.debug(`API Request: ${method} ${fullUrl}`);
             const options = {
                 hostname: url.hostname,
-                port: 443,
+                port: url.port || (this.isHttps ? 443 : 80),
                 path: url.pathname + url.search,
                 method,
                 headers: {
@@ -59,7 +66,8 @@ class NoLongerEvilAPI {
                     'Authorization': `Bearer ${this.apiKey}`,
                 },
             };
-            const req = https.request(options, (res) => {
+            const client = this.isHttps ? https : http;
+            const req = client.request(options, (res) => {
                 let data = '';
                 res.on('data', (chunk) => {
                     data += chunk;

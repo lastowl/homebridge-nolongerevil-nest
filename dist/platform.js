@@ -26,8 +26,13 @@ class NoLongerEvilPlatform {
             this.api_client = null;
             return;
         }
-        this.api_client = new api_1.NoLongerEvilAPI(config.apiKey, log);
-        this.log.info('NoLongerEvil platform initialized');
+        this.api_client = new api_1.NoLongerEvilAPI(config.apiKey, log, config.serverUrl);
+        if (config.serverUrl) {
+            this.log.info(`NoLongerEvil platform initialized (self-hosted: ${config.serverUrl})`);
+        }
+        else {
+            this.log.info('NoLongerEvil platform initialized (using hosted API)');
+        }
         // Wait for Homebridge to finish loading cached accessories
         this.api.on('didFinishLaunching', () => {
             this.log.debug('Finished restoring cached accessories');
