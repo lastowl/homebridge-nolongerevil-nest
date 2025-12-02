@@ -45,7 +45,9 @@ class NoLongerEvilAPI {
     }
     request(method, path, body) {
         return new Promise((resolve, reject) => {
-            const url = new URL(path, this.baseUrl);
+            const fullUrl = `${this.baseUrl}${path}`;
+            const url = new URL(fullUrl);
+            this.log.debug(`API Request: ${method} ${fullUrl}`);
             const options = {
                 hostname: url.hostname,
                 port: 443,

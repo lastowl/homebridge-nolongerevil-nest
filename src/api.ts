@@ -58,7 +58,10 @@ export class NoLongerEvilAPI {
     body?: unknown,
   ): Promise<T> {
     return new Promise((resolve, reject) => {
-      const url = new URL(path, this.baseUrl);
+      const fullUrl = `${this.baseUrl}${path}`;
+      const url = new URL(fullUrl);
+
+      this.log.debug(`API Request: ${method} ${fullUrl}`);
 
       const options: https.RequestOptions = {
         hostname: url.hostname,
