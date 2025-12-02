@@ -1,22 +1,32 @@
 {
   "name": "homebridge-nolongerevil-nest",
+  "displayName": "NoLongerEvil Nest",
   "version": "1.0.0",
-  "description": "Homebridge plugin for NoLongerEvil Nest thermostats",
+  "description": "Homebridge plugin for NoLongerEvil Nest Gen 1 & 2 thermostats - revive your bricked Nest thermostat",
   "main": "dist/index.js",
   "scripts": {
     "lint": "eslint src/**.ts --max-warnings=0",
     "watch": "npm run build && npm link && nodemon",
     "build": "rimraf ./dist && tsc",
-    "prepublishOnly": "npm run lint && npm run build",
-    "prepare": "npm run build || true"
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "homebridge-plugin",
+    "homebridge",
+    "homekit",
     "nest",
+    "nest thermostat",
     "thermostat",
-    "nolongerevil"
+    "nolongerevil",
+    "smart home",
+    "hvac",
+    "temperature",
+    "heating",
+    "cooling",
+    "nest gen 1",
+    "nest gen 2"
   ],
-  "author": "",
+  "author": "lastowl",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,10 +36,18 @@
     "url": "https://github.com/lastowl/homebridge-nolongerevil-nest/issues"
   },
   "homepage": "https://github.com/lastowl/homebridge-nolongerevil-nest#readme",
+  "funding": {
+    "type": "buymeacoffee",
+    "url": "https://buymeacoffee.com/codykociemba"
+  },
   "engines": {
     "node": "^18.17.0 || ^20.9.0 || ^22",
     "homebridge": "^1.6.0 || ^2.0.0"
   },
+  "files": [
+    "dist",
+    "config.schema.json"
+  ],
   "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.10.0",
