@@ -1,0 +1,39 @@
+{
+  "pluginAlias": "NoLongerEvilNest",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Homebridge plugin for NoLongerEvil Nest thermostats. Get your API key from your [NoLongerEvil account settings](https://nolongerevil.com/settings).",
+  "footerDisplay": "For API documentation, see [NoLongerEvil API Docs](https://docs.nolongerevil.com/api-reference/introduction).",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "NoLongerEvil Nest",
+        "required": true
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "placeholder": "nle_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "description": "Your NoLongerEvil API key. Create one in Settings > API Keys with 'read' and 'write' scopes.",
+        "required": true
+      },
+      "pollInterval": {
+        "title": "Poll Interval (seconds)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 15,
+        "maximum": 300,
+        "description": "How often to poll the thermostat for status updates. Minimum 15 seconds due to API rate limits."
+      }
+    },
+    "required": ["apiKey"]
+  },
+  "layout": [
+    "name",
+    "apiKey",
+    "pollInterval"
+  ]
+}
