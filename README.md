@@ -2,6 +2,8 @@
 
 A [Homebridge](https://homebridge.io) plugin for controlling Nest Gen 1 & 2 thermostats using the [NoLongerEvil](https://nolongerevil.com) API.
 
+> **Looking for MQTT support?** If you prefer to use MQTT instead of the REST API, check out [homebridge-nolongerevil-thermostat](https://github.com/will-tm/homebridge-nolongerevil-thermostat).
+
 ## What is NoLongerEvil?
 
 NoLongerEvil is a project that revives bricked or abandoned Nest Gen 1 & 2 thermostats with custom firmware, allowing them to work independently of Google's servers. This plugin connects those thermostats to HomeKit via Homebridge.
