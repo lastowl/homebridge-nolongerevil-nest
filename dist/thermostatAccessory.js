@@ -182,9 +182,17 @@ class NestThermostatAccessory {
     async setCoolingThresholdTemperature(value) {
         const temperature = value;
         this.platform.log.info(`Setting ${this.state.name} cooling threshold to ${temperature}°C`);
+        // Ensure minimum 1.5°C gap between low and high
+        const minGap = 1.5;
+        let lowTemp = this.state.targetTemperatureLow;
+        if (temperature <= lowTemp) {
+            lowTemp = temperature - minGap;
+            this.platform.log.info(`Adjusting heating threshold to ${lowTemp}°C to maintain minimum gap`);
+        }
         try {
-            await this.platform.api_client.setTemperatureRange(this.state.deviceId, this.state.targetTemperatureLow, temperature);
+            await this.platform.api_client.setTemperatureRange(this.state.deviceId, lowTemp, temperature);
             this.state.targetTemperatureHigh = temperature;
+            this.state.targetTemperatureLow = lowTemp;
         }
         catch (error) {
             this.platform.log.error('Failed to set cooling threshold:', error);
@@ -197,9 +205,17 @@ class NestThermostatAccessory {
     async setHeatingThresholdTemperature(value) {
         const temperature = value;
         this.platform.log.info(`Setting ${this.state.name} heating threshold to ${temperature}°C`);
+        // Ensure minimum 1.5°C gap between low and high
+        const minGap = 1.5;
+        let highTemp = this.state.targetTemperatureHigh;
+        if (temperature >= highTemp) {
+            highTemp = temperature + minGap;
+            this.platform.log.info(`Adjusting cooling threshold to ${highTemp}°C to maintain minimum gap`);
+        }
         try {
-            await this.platform.api_client.setTemperatureRange(this.state.deviceId, temperature, this.state.targetTemperatureHigh);
+            await this.platform.api_client.setTemperatureRange(this.state.deviceId, temperature, highTemp);
             this.state.targetTemperatureLow = temperature;
+            this.state.targetTemperatureHigh = highTemp;
         }
         catch (error) {
             this.platform.log.error('Failed to set heating threshold:', error);
