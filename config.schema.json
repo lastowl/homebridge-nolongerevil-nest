@@ -10,15 +10,13 @@
       "name": {
         "title": "Name",
         "type": "string",
-        "default": "NoLongerEvil Nest",
-        "required": true
+        "default": "NoLongerEvil Nest"
       },
       "apiKey": {
         "title": "API Key",
         "type": "string",
         "placeholder": "nle_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-        "description": "Your NoLongerEvil API key. Create one in Settings > API Keys with 'read' and 'write' scopes.",
-        "required": true
+        "description": "Your NoLongerEvil API key. Create one in Settings > API Keys with 'read' and 'write' scopes."
       },
       "serverUrl": {
         "title": "Server URL (Optional)",
