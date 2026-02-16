@@ -9,12 +9,22 @@ import {
 } from 'homebridge';
 
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
-import { NoLongerEvilAPI, ThermostatState } from './api';
+import { NoLongerEvilAPI, ThermostatApiClient, ThermostatState } from './api';
+import { SelfHostedAPI } from './selfHostedApi';
 import { NestThermostatAccessory } from './thermostatAccessory';
 
+export interface ServerConfig {
+  apiKey: string;
+  serverUrl?: string;
+  name?: string;
+}
+
 export interface NoLongerEvilConfig extends PlatformConfig {
+  // Legacy single-source config (backward compatible)
   apiKey?: string;
   serverUrl?: string;
+  // Multi-source config
+  servers?: ServerConfig[];
   pollInterval?: number;
 }
 
@@ -25,7 +35,8 @@ export class NoLongerEvilPlatform implements DynamicPlatformPlugin {
   public readonly accessories: PlatformAccessory[] = [];
   private readonly thermostatAccessories: Map<string, NestThermostatAccessory> = new Map();
 
-  public readonly api_client: NoLongerEvilAPI;
+  private readonly apiClients: ThermostatApiClient[] = [];
+  private readonly deviceClientMap: Map<string, ThermostatApiClient> = new Map();
 
   constructor(
     public readonly log: Logger,
@@ -35,20 +46,34 @@ export class NoLongerEvilPlatform implements DynamicPlatformPlugin {
     this.Service = this.api.hap.Service;
     this.Characteristic = this.api.hap.Characteristic;
 
-    // Validate configuration
-    if (!config.apiKey) {
-      this.log.error('Missing required configuration: apiKey');
-      this.log.error('Please add your NoLongerEvil API key to the plugin configuration.');
-      this.api_client = null!;
+    const serverConfigs = this.resolveServerConfigs(config);
+
+    if (serverConfigs.length === 0) {
+      this.log.error('No API sources configured. Add an apiKey or configure the servers array.');
       return;
     }
 
-    this.api_client = new NoLongerEvilAPI(config.apiKey, log, config.serverUrl);
+    for (const sc of serverConfigs) {
+      if (!sc.apiKey) {
+        this.log.warn(`Skipping server "${sc.name || 'unnamed'}" - missing apiKey`);
+        continue;
+      }
 
-    if (config.serverUrl) {
-      this.log.info(`NoLongerEvil platform initialized (self-hosted: ${config.serverUrl})`);
-    } else {
-      this.log.info('NoLongerEvil platform initialized (using hosted API)');
+      if (sc.serverUrl) {
+        this.apiClients.push(new SelfHostedAPI(sc.apiKey, sc.serverUrl, log));
+      } else {
+        this.apiClients.push(new NoLongerEvilAPI(sc.apiKey, log));
+      }
+    }
+
+    if (this.apiClients.length === 0) {
+      this.log.error('No valid API sources found after configuration. Check your apiKey settings.');
+      return;
+    }
+
+    this.log.info(`NoLongerEvil platform initialized with ${this.apiClients.length} API source(s)`);
+    for (const client of this.apiClients) {
+      this.log.info(`  - ${client.sourceLabel}`);
     }
 
     // Wait for Homebridge to finish loading cached accessories
@@ -58,35 +83,87 @@ export class NoLongerEvilPlatform implements DynamicPlatformPlugin {
     });
   }
 
+  private resolveServerConfigs(config: NoLongerEvilConfig): ServerConfig[] {
+    // If new servers array is present and non-empty, use it
+    if (config.servers && config.servers.length > 0) {
+      return config.servers;
+    }
+
+    // Fall back to legacy single-source fields
+    if (config.apiKey) {
+      return [{
+        apiKey: config.apiKey,
+        serverUrl: config.serverUrl,
+      }];
+    }
+
+    return [];
+  }
+
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.info('Loading accessory from cache:', accessory.displayName);
     this.accessories.push(accessory);
   }
 
   async discoverDevices(): Promise<void> {
-    if (!this.api_client) {
-      this.log.error('API client not initialized, skipping device discovery');
+    if (this.apiClients.length === 0) {
+      this.log.error('No API clients initialized, skipping device discovery');
       return;
     }
 
     try {
       this.log.info('Discovering Nest thermostats...');
-      const thermostatStates = await this.api_client.getThermostatStates();
+      const allStates: ThermostatState[] = [];
 
-      if (thermostatStates.length === 0) {
-        this.log.warn('No thermostats found. Make sure devices are registered with your NoLongerEvil account.');
+      // Query all sources in parallel
+      const results = await Promise.allSettled(
+        this.apiClients.map(client => client.getThermostatStates()),
+      );
+
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const client = this.apiClients[i];
+
+        if (result.status === 'fulfilled') {
+          this.log.info(`Found ${result.value.length} thermostat(s) from ${client.sourceLabel}`);
+          for (const state of result.value) {
+            allStates.push(state);
+            this.deviceClientMap.set(state.deviceId, client);
+          }
+        } else {
+          this.log.error(`Failed to discover devices from ${client.sourceLabel}:`, result.reason);
+        }
+      }
+
+      // Deduplicate by serial (first source wins), warn on conflicts
+      const seenSerials = new Map<string, string>();
+      const uniqueStates: ThermostatState[] = [];
+
+      for (const state of allStates) {
+        const existingSource = seenSerials.get(state.serial);
+        if (existingSource) {
+          const thisSource = this.deviceClientMap.get(state.deviceId)?.sourceLabel || 'unknown';
+          this.log.warn(
+            `Thermostat ${state.serial} found on multiple sources (${existingSource}, ${thisSource}). Using first occurrence.`,
+          );
+        } else {
+          seenSerials.set(state.serial, this.deviceClientMap.get(state.deviceId)?.sourceLabel || 'unknown');
+          uniqueStates.push(state);
+        }
+      }
+
+      if (uniqueStates.length === 0) {
+        this.log.warn('No thermostats found from any source. Make sure devices are registered.');
         return;
       }
 
-      this.log.info(`Found ${thermostatStates.length} thermostat(s)`);
+      this.log.info(`Total: ${uniqueStates.length} unique thermostat(s)`);
 
-      for (const state of thermostatStates) {
+      for (const state of uniqueStates) {
         this.addOrUpdateThermostat(state);
       }
 
-      // Remove accessories that are no longer present
-      this.removeStaleAccessories(thermostatStates);
-
+      this.removeStaleAccessories(uniqueStates);
     } catch (error) {
       this.log.error('Failed to discover devices:', error);
     }
@@ -94,28 +171,29 @@ export class NoLongerEvilPlatform implements DynamicPlatformPlugin {
 
   private addOrUpdateThermostat(state: ThermostatState): void {
     const uuid = this.api.hap.uuid.generate(state.serial);
+    const client = this.deviceClientMap.get(state.deviceId);
+
+    if (!client) {
+      this.log.error(`No API client found for device ${state.deviceId}, skipping`);
+      return;
+    }
+
     const existingAccessory = this.accessories.find(acc => acc.UUID === uuid);
 
     if (existingAccessory) {
-      // Accessory already exists, update it
       this.log.info('Restoring existing accessory:', state.name);
       existingAccessory.context.device = state;
 
-      // Create the accessory handler
-      const thermostatAccessory = new NestThermostatAccessory(this, existingAccessory, state);
-      this.thermostatAccessories.set(state.deviceId, thermostatAccessory);
-
+      const thermostatAccessory = new NestThermostatAccessory(this, existingAccessory, state, client);
+      this.thermostatAccessories.set(state.serial, thermostatAccessory);
     } else {
-      // Create a new accessory
       this.log.info('Adding new accessory:', state.name);
       const accessory = new this.api.platformAccessory(state.name, uuid);
       accessory.context.device = state;
 
-      // Create the accessory handler
-      const thermostatAccessory = new NestThermostatAccessory(this, accessory, state);
-      this.thermostatAccessories.set(state.deviceId, thermostatAccessory);
+      const thermostatAccessory = new NestThermostatAccessory(this, accessory, state, client);
+      this.thermostatAccessories.set(state.serial, thermostatAccessory);
 
-      // Register the accessory
       this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       this.accessories.push(accessory);
     }
@@ -133,12 +211,12 @@ export class NoLongerEvilPlatform implements DynamicPlatformPlugin {
       this.log.info(`Removing ${staleAccessories.length} stale accessory(ies)`);
 
       for (const accessory of staleAccessories) {
-        const deviceId = accessory.context.device?.deviceId;
-        if (deviceId) {
-          const thermostatAccessory = this.thermostatAccessories.get(deviceId);
+        const serial = accessory.context.device?.serial;
+        if (serial) {
+          const thermostatAccessory = this.thermostatAccessories.get(serial);
           if (thermostatAccessory) {
             thermostatAccessory.stopPolling();
-            this.thermostatAccessories.delete(deviceId);
+            this.thermostatAccessories.delete(serial);
           }
         }
       }

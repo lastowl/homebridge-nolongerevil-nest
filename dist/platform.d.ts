@@ -1,8 +1,13 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { NoLongerEvilAPI } from './api';
+export interface ServerConfig {
+    apiKey: string;
+    serverUrl?: string;
+    name?: string;
+}
 export interface NoLongerEvilConfig extends PlatformConfig {
     apiKey?: string;
     serverUrl?: string;
+    servers?: ServerConfig[];
     pollInterval?: number;
 }
 export declare class NoLongerEvilPlatform implements DynamicPlatformPlugin {
@@ -13,8 +18,10 @@ export declare class NoLongerEvilPlatform implements DynamicPlatformPlugin {
     readonly Characteristic: typeof Characteristic;
     readonly accessories: PlatformAccessory[];
     private readonly thermostatAccessories;
-    readonly api_client: NoLongerEvilAPI;
+    private readonly apiClients;
+    private readonly deviceClientMap;
     constructor(log: Logger, config: NoLongerEvilConfig, api: API);
+    private resolveServerConfigs;
     configureAccessory(accessory: PlatformAccessory): void;
     discoverDevices(): Promise<void>;
     private addOrUpdateThermostat;

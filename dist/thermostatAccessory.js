@@ -9,9 +9,11 @@ class NestThermostatAccessory {
     state;
     pollInterval;
     pollTimer;
-    constructor(platform, accessory, initialState) {
+    apiClient;
+    constructor(platform, accessory, initialState, apiClient) {
         this.platform = platform;
         this.accessory = accessory;
+        this.apiClient = apiClient;
         this.state = initialState;
         this.pollInterval = this.platform.config.pollInterval || 30;
         // Set accessory information
@@ -85,7 +87,7 @@ class NestThermostatAccessory {
         }
     }
     async refreshState() {
-        const newState = await this.platform.api_client.getThermostatState(this.state.deviceId);
+        const newState = await this.apiClient.getThermostatState(this.state.deviceId);
         if (newState) {
             this.state = newState;
             this.updateCharacteristics();
@@ -148,7 +150,7 @@ class NestThermostatAccessory {
         const mode = this.mapHomeKitToHvacMode(value);
         this.platform.log.info(`Setting ${this.state.name} mode to ${mode}`);
         try {
-            await this.platform.api_client.setMode(this.state.deviceId, mode);
+            await this.apiClient.setMode(this.state.deviceId, mode);
             this.state.hvacMode = mode;
         }
         catch (error) {
@@ -168,7 +170,7 @@ class NestThermostatAccessory {
         try {
             // Determine mode based on current HVAC mode
             const mode = this.state.hvacMode === 'cool' ? 'cool' : 'heat';
-            await this.platform.api_client.setTemperature(this.state.deviceId, temperature, mode);
+            await this.apiClient.setTemperature(this.state.deviceId, temperature, mode);
             this.state.targetTemperature = temperature;
         }
         catch (error) {
@@ -190,7 +192,7 @@ class NestThermostatAccessory {
             this.platform.log.info(`Adjusting heating threshold to ${lowTemp}°C to maintain minimum gap`);
         }
         try {
-            await this.platform.api_client.setTemperatureRange(this.state.deviceId, lowTemp, temperature);
+            await this.apiClient.setTemperatureRange(this.state.deviceId, lowTemp, temperature);
             this.state.targetTemperatureHigh = temperature;
             this.state.targetTemperatureLow = lowTemp;
         }
@@ -213,7 +215,7 @@ class NestThermostatAccessory {
             this.platform.log.info(`Adjusting cooling threshold to ${highTemp}°C to maintain minimum gap`);
         }
         try {
-            await this.platform.api_client.setTemperatureRange(this.state.deviceId, temperature, highTemp);
+            await this.apiClient.setTemperatureRange(this.state.deviceId, temperature, highTemp);
             this.state.targetTemperatureLow = temperature;
             this.state.targetTemperatureHigh = highTemp;
         }

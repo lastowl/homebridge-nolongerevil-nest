@@ -2,7 +2,7 @@
   "pluginAlias": "NoLongerEvilNest",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Homebridge plugin for NoLongerEvil Nest thermostats. Works with both the hosted service and self-hosted installations.",
+  "headerDisplay": "Homebridge plugin for NoLongerEvil Nest thermostats. Supports both the hosted service and self-hosted installations, including mixed configurations.",
   "footerDisplay": "For API documentation, see [NoLongerEvil API Docs](https://docs.nolongerevil.com/api-reference/introduction).",
   "schema": {
     "type": "object",
@@ -16,13 +16,41 @@
         "title": "API Key",
         "type": "string",
         "placeholder": "nle_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-        "description": "Your NoLongerEvil API key. Create one in Settings > API Keys with 'read' and 'write' scopes."
+        "description": "Your NoLongerEvil API key. For multiple servers or self-hosted setups, use the Servers section below instead."
       },
       "serverUrl": {
-        "title": "Server URL (Optional)",
+        "title": "Server URL",
         "type": "string",
-        "placeholder": "http://192.168.1.100:3000/api/v1",
+        "placeholder": "http://192.168.1.100:8081",
         "description": "Only set this if using a self-hosted NoLongerEvil server. Leave empty to use the hosted service (nolongerevil.com)."
+      },
+      "servers": {
+        "title": "Servers",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Server Name",
+              "type": "string",
+              "placeholder": "My Self-Hosted Server",
+              "description": "Optional label for this server (used in logs)."
+            },
+            "apiKey": {
+              "title": "API Key",
+              "type": "string",
+              "placeholder": "nle_xxx or nlapi_xxx",
+              "description": "API key for this server."
+            },
+            "serverUrl": {
+              "title": "Server URL",
+              "type": "string",
+              "placeholder": "http://192.168.1.100:8081",
+              "description": "Leave empty to use the hosted service (nolongerevil.com). Set to your server's Control API URL for self-hosted."
+            }
+          },
+          "required": ["apiKey"]
+        }
       },
       "pollInterval": {
         "title": "Poll Interval (seconds)",
@@ -30,21 +58,48 @@
         "default": 30,
         "minimum": 15,
         "maximum": 300,
-        "description": "How often to poll the thermostat for status updates. Minimum 15 seconds due to API rate limits."
+        "description": "How often to poll thermostats for status updates. Minimum 15 seconds due to API rate limits."
       }
-    },
-    "required": ["apiKey"]
+    }
   },
   "layout": [
     "name",
-    "apiKey",
+    {
+      "type": "fieldset",
+      "title": "Simple Setup (Single API Source)",
+      "description": "Use these fields if you only have one API source. For multiple servers, use the section below instead.",
+      "expandable": true,
+      "expanded": true,
+      "items": [
+        "apiKey",
+        "serverUrl"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Multiple Servers",
+      "description": "Configure multiple API sources (hosted + self-hosted). When servers are configured here, the simple setup fields above are ignored.",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        {
+          "key": "servers",
+          "type": "array",
+          "buttonText": "Add Server",
+          "items": [
+            "servers[].name",
+            "servers[].apiKey",
+            "servers[].serverUrl"
+          ]
+        }
+      ]
+    },
     {
       "type": "fieldset",
       "title": "Advanced Settings",
       "expandable": true,
       "expanded": false,
       "items": [
-        "serverUrl",
         "pollInterval"
       ]
     }

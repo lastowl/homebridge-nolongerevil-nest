@@ -4,7 +4,7 @@ import {
   CharacteristicValue,
 } from 'homebridge';
 import { NoLongerEvilPlatform } from './platform';
-import { ThermostatState } from './api';
+import { ThermostatApiClient, ThermostatState } from './api';
 
 export class NestThermostatAccessory {
   private readonly thermostatService: Service;
@@ -13,12 +13,15 @@ export class NestThermostatAccessory {
   private state: ThermostatState;
   private readonly pollInterval: number;
   private pollTimer?: NodeJS.Timeout;
+  private readonly apiClient: ThermostatApiClient;
 
   constructor(
     private readonly platform: NoLongerEvilPlatform,
     private readonly accessory: PlatformAccessory,
     initialState: ThermostatState,
+    apiClient: ThermostatApiClient,
   ) {
+    this.apiClient = apiClient;
     this.state = initialState;
     this.pollInterval = this.platform.config.pollInterval || 30;
 
@@ -115,7 +118,7 @@ export class NestThermostatAccessory {
   }
 
   async refreshState(): Promise<void> {
-    const newState = await this.platform.api_client.getThermostatState(this.state.deviceId);
+    const newState = await this.apiClient.getThermostatState(this.state.deviceId);
     if (newState) {
       this.state = newState;
       this.updateCharacteristics();
@@ -213,7 +216,7 @@ export class NestThermostatAccessory {
     this.platform.log.info(`Setting ${this.state.name} mode to ${mode}`);
 
     try {
-      await this.platform.api_client.setMode(this.state.deviceId, mode);
+      await this.apiClient.setMode(this.state.deviceId, mode);
       this.state.hvacMode = mode;
     } catch (error) {
       this.platform.log.error('Failed to set mode:', error);
@@ -238,7 +241,7 @@ export class NestThermostatAccessory {
     try {
       // Determine mode based on current HVAC mode
       const mode = this.state.hvacMode === 'cool' ? 'cool' : 'heat';
-      await this.platform.api_client.setTemperature(this.state.deviceId, temperature, mode);
+      await this.apiClient.setTemperature(this.state.deviceId, temperature, mode);
       this.state.targetTemperature = temperature;
     } catch (error) {
       this.platform.log.error('Failed to set temperature:', error);
@@ -265,7 +268,7 @@ export class NestThermostatAccessory {
     }
 
     try {
-      await this.platform.api_client.setTemperatureRange(
+      await this.apiClient.setTemperatureRange(
         this.state.deviceId,
         lowTemp,
         temperature,
@@ -297,7 +300,7 @@ export class NestThermostatAccessory {
     }
 
     try {
-      await this.platform.api_client.setTemperatureRange(
+      await this.apiClient.setTemperatureRange(
         this.state.deviceId,
         temperature,
         highTemp,

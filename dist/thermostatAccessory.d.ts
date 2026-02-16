@@ -1,6 +1,6 @@
 import { PlatformAccessory, CharacteristicValue } from 'homebridge';
 import { NoLongerEvilPlatform } from './platform';
-import { ThermostatState } from './api';
+import { ThermostatApiClient, ThermostatState } from './api';
 export declare class NestThermostatAccessory {
     private readonly platform;
     private readonly accessory;
@@ -9,7 +9,8 @@ export declare class NestThermostatAccessory {
     private state;
     private readonly pollInterval;
     private pollTimer?;
-    constructor(platform: NoLongerEvilPlatform, accessory: PlatformAccessory, initialState: ThermostatState);
+    private readonly apiClient;
+    constructor(platform: NoLongerEvilPlatform, accessory: PlatformAccessory, initialState: ThermostatState, apiClient: ThermostatApiClient);
     private startPolling;
     stopPolling(): void;
     refreshState(): Promise<void>;

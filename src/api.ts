@@ -43,9 +43,20 @@ export interface ThermostatState {
   name: string;
 }
 
+// Common interface for all API backends (hosted, self-hosted, etc.)
+export interface ThermostatApiClient {
+  getThermostatStates(): Promise<ThermostatState[]>;
+  getThermostatState(deviceId: string): Promise<ThermostatState | null>;
+  setTemperature(deviceId: string, temperature: number, mode: 'heat' | 'cool'): Promise<void>;
+  setTemperatureRange(deviceId: string, lowTemperature: number, highTemperature: number): Promise<void>;
+  setMode(deviceId: string, mode: 'off' | 'heat' | 'cool' | 'heat-cool'): Promise<void>;
+  setAwayMode(deviceId: string, away: boolean): Promise<void>;
+  readonly sourceLabel: string;
+}
+
 const HOSTED_API_URL = 'https://nolongerevil.com/api/v1';
 
-export class NoLongerEvilAPI {
+export class NoLongerEvilAPI implements ThermostatApiClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly log: Logger;
@@ -59,6 +70,10 @@ export class NoLongerEvilAPI {
     this.isHttps = this.baseUrl.startsWith('https://');
 
     this.log.debug(`Using API URL: ${this.baseUrl}`);
+  }
+
+  get sourceLabel(): string {
+    return this.baseUrl === HOSTED_API_URL ? 'hosted' : `hosted@${this.baseUrl}`;
   }
 
   private request<T>(

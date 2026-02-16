@@ -33,31 +33,29 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NoLongerEvilAPI = void 0;
+exports.SelfHostedAPI = void 0;
 const https = __importStar(require("https"));
 const http = __importStar(require("http"));
-const HOSTED_API_URL = 'https://nolongerevil.com/api/v1';
-class NoLongerEvilAPI {
+class SelfHostedAPI {
     baseUrl;
     apiKey;
     log;
     isHttps;
-    constructor(apiKey, log, serverUrl) {
-        // Use custom server URL if provided, otherwise use hosted API
-        this.baseUrl = serverUrl ? serverUrl.replace(/\/$/, '') : HOSTED_API_URL;
+    constructor(apiKey, serverUrl, log) {
+        this.baseUrl = serverUrl.replace(/\/$/, '');
         this.apiKey = apiKey;
         this.log = log;
         this.isHttps = this.baseUrl.startsWith('https://');
-        this.log.debug(`Using API URL: ${this.baseUrl}`);
+        this.log.debug(`Using self-hosted API URL: ${this.baseUrl}`);
     }
     get sourceLabel() {
-        return this.baseUrl === HOSTED_API_URL ? 'hosted' : `hosted@${this.baseUrl}`;
+        return `self-hosted@${this.baseUrl}`;
     }
     request(method, path, body) {
         return new Promise((resolve, reject) => {
             const fullUrl = `${this.baseUrl}${path}`;
             const url = new URL(fullUrl);
-            this.log.debug(`API Request: ${method} ${fullUrl}`);
+            this.log.debug(`Self-Hosted API Request: ${method} ${fullUrl}`);
             const options = {
                 hostname: url.hostname,
                 port: url.port || (this.isHttps ? 443 : 80),
@@ -84,11 +82,8 @@ class NoLongerEvilAPI {
                             resolve(data);
                         }
                     }
-                    else if (res.statusCode === 429) {
-                        reject(new Error('Rate limit exceeded. Please wait before making more requests.'));
-                    }
                     else if (res.statusCode === 401) {
-                        reject(new Error('Invalid API key. Please check your configuration.'));
+                        reject(new Error('Invalid API key. Please check your self-hosted server configuration.'));
                     }
                     else {
                         reject(new Error(`HTTP ${res.statusCode}: ${data}`));
@@ -102,49 +97,90 @@ class NoLongerEvilAPI {
             req.end();
         });
     }
-    async getDevices() {
-        const response = await this.request('GET', '/devices');
-        return response.devices;
+    async getThermostatStates() {
+        try {
+            const devices = await this.request('GET', '/api/devices');
+            const states = [];
+            for (const device of devices) {
+                try {
+                    const state = await this.getThermostatState(device.serial);
+                    if (state) {
+                        states.push(state);
+                    }
+                }
+                catch (error) {
+                    this.log.error(`Failed to get status for device ${device.serial}:`, error);
+                }
+            }
+            return states;
+        }
+        catch (error) {
+            this.log.error('Failed to get thermostat states from self-hosted server:', error);
+            return [];
+        }
     }
-    async getDeviceStatus(deviceId) {
-        return this.request('GET', `/thermostat/${deviceId}/status`);
+    async getThermostatState(deviceId) {
+        // deviceId is the serial for self-hosted
+        const serial = deviceId;
+        try {
+            const response = await this.request('GET', `/status?serial=${encodeURIComponent(serial)}`);
+            return this.parseStatus(serial, response);
+        }
+        catch (error) {
+            this.log.error(`Failed to get state for ${serial}:`, error);
+            return null;
+        }
     }
     async setTemperature(deviceId, temperature, mode) {
-        await this.request('POST', `/thermostat/${deviceId}/temperature`, {
+        await this.request('POST', '/command', {
+            serial: deviceId,
+            action: 'temp',
             value: temperature,
             mode,
-            scale: 'C',
         });
     }
     async setTemperatureRange(deviceId, lowTemperature, highTemperature) {
-        await this.request('POST', `/thermostat/${deviceId}/temperature/range`, {
-            low: lowTemperature,
-            high: highTemperature,
-            scale: 'C',
+        await this.request('POST', '/command', {
+            serial: deviceId,
+            action: 'temp',
+            mode: 'range',
+            target_temperature_low: lowTemperature,
+            target_temperature_high: highTemperature,
         });
     }
     async setMode(deviceId, mode) {
-        await this.request('POST', `/thermostat/${deviceId}/mode`, {
-            mode,
+        // Translate heat-cool -> range for the self-hosted API
+        const apiMode = mode === 'heat-cool' ? 'range' : mode;
+        await this.request('POST', '/command', {
+            serial: deviceId,
+            action: 'set',
+            field: 'target_temperature_type',
+            value: apiMode,
         });
     }
     async setAwayMode(deviceId, away) {
-        await this.request('POST', `/thermostat/${deviceId}/away`, {
-            away,
+        await this.request('POST', '/command', {
+            serial: deviceId,
+            action: 'away',
+            value: away,
         });
     }
-    parseDeviceStatus(deviceId, response) {
-        const serial = response.device.serial;
+    parseStatus(serial, response) {
+        const deviceState = response.deviceState?.[serial];
+        if (!deviceState) {
+            this.log.warn(`No state data found for device ${serial}`);
+            return null;
+        }
         const sharedKey = `shared.${serial}`;
         const deviceKey = `device.${serial}`;
-        const shared = response.state[sharedKey]?.value || {};
-        const device = response.state[deviceKey]?.value || {};
-        // Temperature values are in Celsius from the API
+        const shared = deviceState[sharedKey]?.value || {};
+        const device = deviceState[deviceKey]?.value || {};
+        // Temperature values are in Celsius
         const currentTemp = shared['current_temperature'] ?? 20;
         const targetTemp = shared['target_temperature'] ?? 20;
         const targetTempLow = shared['target_temperature_low'] ?? 18;
         const targetTempHigh = shared['target_temperature_high'] ?? 24;
-        // HVAC mode mapping
+        // HVAC mode mapping (self-hosted uses 'range' instead of 'heat-cool')
         const tempType = shared['target_temperature_type'] || 'off';
         let hvacMode = 'off';
         switch (tempType) {
@@ -177,10 +213,10 @@ class NoLongerEvilAPI {
         // Device capabilities
         const canHeat = shared['can_heat'] ?? true;
         const canCool = shared['can_cool'] ?? false;
-        // Device name
-        const name = response.device.name || `Nest ${serial.slice(-4)}`;
+        // Self-hosted doesn't provide a name in the device list
+        const name = shared['name'] || `Nest ${serial.slice(-4)}`;
         return {
-            deviceId,
+            deviceId: serial, // self-hosted uses serial as the device identifier
             serial,
             currentTemperature: currentTemp,
             targetTemperature: targetTemp,
@@ -195,35 +231,5 @@ class NoLongerEvilAPI {
             name,
         };
     }
-    async getThermostatStates() {
-        try {
-            const devices = await this.getDevices();
-            const states = [];
-            for (const device of devices) {
-                try {
-                    const status = await this.getDeviceStatus(device.id);
-                    states.push(this.parseDeviceStatus(device.id, status));
-                }
-                catch (error) {
-                    this.log.error(`Failed to get status for device ${device.id}:`, error);
-                }
-            }
-            return states;
-        }
-        catch (error) {
-            this.log.error('Failed to get thermostat states:', error);
-            return [];
-        }
-    }
-    async getThermostatState(deviceId) {
-        try {
-            const status = await this.getDeviceStatus(deviceId);
-            return this.parseDeviceStatus(deviceId, status);
-        }
-        catch (error) {
-            this.log.error(`Failed to get state for ${deviceId}:`, error);
-            return null;
-        }
-    }
 }
-exports.NoLongerEvilAPI = NoLongerEvilAPI;
+exports.SelfHostedAPI = SelfHostedAPI;
