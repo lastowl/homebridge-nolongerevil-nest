@@ -2,6 +2,7 @@
   "pluginAlias": "NoLongerEvilNest",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
   "headerDisplay": "Homebridge plugin for NoLongerEvil Nest thermostats. Supports both the hosted service and self-hosted installations, including mixed configurations.",
   "footerDisplay": "For API documentation, see [NoLongerEvil API Docs](https://docs.nolongerevil.com/api-reference/introduction).",
   "schema": {
@@ -59,6 +60,12 @@
         "minimum": 15,
         "maximum": 300,
         "description": "How often to poll thermostats for status updates. Minimum 15 seconds due to API rate limits."
+      },
+      "enableScheduleSwitch": {
+        "title": "Enable Learning Mode Switch",
+        "type": "boolean",
+        "default": true,
+        "description": "Adds a switch to each thermostat in HomeKit to enable/disable the Nest's learning mode. When disabled, the thermostat won't auto-create schedule entries from manual adjustments."
       }
     }
   },
@@ -100,7 +107,8 @@
       "expandable": true,
       "expanded": false,
       "items": [
-        "pollInterval"
+        "pollInterval",
+        "enableScheduleSwitch"
       ]
     }
   ]

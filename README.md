@@ -10,13 +10,14 @@ NoLongerEvil is a project that revives bricked or abandoned Nest Gen 1 & 2 therm
 
 ## Features
 
-- Control Nest thermostats from Apple Home app
-- Set target temperature
-- Switch between heating, cooling, auto, and off modes
-- Temperature range support for auto mode
-- Humidity sensor
-- Automatic device discovery
-- Works with both hosted and self-hosted NoLongerEvil servers
+- **Thermostat Control** — Set target temperature, switch between heating, cooling, auto, and off modes
+- **Temperature Range** — Set heating and cooling thresholds for auto mode
+- **Humidity Sensor** — View current relative humidity
+- **Smart Schedule Switch** — Enable or disable the Nest's built-in schedule from HomeKit
+- **Schedule Editor** — View and edit the weekly thermostat schedule from the Homebridge UI
+- **Learning Mode Control** — Automatically disables the Nest's auto-schedule learning when the smart schedule is turned off (self-hosted)
+- **Multi-Source Support** — Connect to multiple hosted and self-hosted NoLongerEvil servers simultaneously
+- **Automatic Device Discovery** — Finds all thermostats across configured API sources
 
 ## Requirements
 
@@ -39,24 +40,19 @@ NoLongerEvil is a project that revives bricked or abandoned Nest Gen 1 & 2 therm
 npm install -g homebridge-nolongerevil-nest
 ```
 
-### Via GitHub
-
-```bash
-npm install -g github:lastowl/homebridge-nolongerevil-nest
-```
-
 ## Configuration
 
 ### Using Homebridge UI
 
 1. Go to **Plugins** → **NoLongerEvil Nest** → **Settings**
 2. Enter your API key
-3. (Optional) Expand **Advanced Settings** to configure server URL for self-hosted installations
-4. Save and restart Homebridge
+3. (Optional) Set server URL for self-hosted installations
+4. (Optional) Configure multiple servers under the **Multiple Servers** section
+5. Save and restart Homebridge
 
 ### Manual Configuration
 
-Add the following to your Homebridge `config.json`:
+#### Simple Setup (Single API Source)
 
 ```json
 {
@@ -70,19 +66,7 @@ Add the following to your Homebridge `config.json`:
 }
 ```
 
-### Configuration Options
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `platform` | Yes | - | Must be `NoLongerEvilNest` |
-| `name` | Yes | `NoLongerEvil Nest` | Display name for the plugin |
-| `apiKey` | Yes | - | Your NoLongerEvil API key |
-| `serverUrl` | No | - | URL for self-hosted server (e.g., `http://192.168.1.100:3000/api/v1`) |
-| `pollInterval` | No | `30` | How often to refresh thermostat state (15-300 seconds) |
-
-### Self-Hosted Server
-
-If you're running your own NoLongerEvil server instead of using the hosted service, add the `serverUrl` option:
+#### Self-Hosted Server
 
 ```json
 {
@@ -90,12 +74,85 @@ If you're running your own NoLongerEvil server instead of using the hosted servi
     {
       "platform": "NoLongerEvilNest",
       "name": "NoLongerEvil Nest",
-      "apiKey": "nle_your_api_key_here",
-      "serverUrl": "http://192.168.1.100:3000/api/v1"
+      "apiKey": "nlapi_your_api_key_here",
+      "serverUrl": "http://192.168.1.100:8081"
     }
   ]
 }
 ```
+
+#### Multiple Servers
+
+```json
+{
+  "platforms": [
+    {
+      "platform": "NoLongerEvilNest",
+      "name": "NoLongerEvil Nest",
+      "servers": [
+        {
+          "name": "Hosted",
+          "apiKey": "nle_your_hosted_key"
+        },
+        {
+          "name": "My Self-Hosted Server",
+          "apiKey": "nlapi_your_selfhosted_key",
+          "serverUrl": "http://192.168.1.100:8081"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Configuration Options
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `platform` | Yes | — | Must be `NoLongerEvilNest` |
+| `name` | Yes | `NoLongerEvil Nest` | Display name for the plugin |
+| `apiKey` | Yes* | — | API key for single-source setup |
+| `serverUrl` | No | — | Server URL for self-hosted (leave empty for hosted) |
+| `servers` | No | — | Array of server configs for multi-source setup |
+| `pollInterval` | No | `30` | How often to refresh thermostat state (15–300 seconds) |
+| `enableScheduleSwitch` | No | `true` | Show the Smart Schedule on/off switch in HomeKit |
+
+*Required if `servers` is not configured.
+
+## HomeKit Accessories
+
+Each thermostat appears in HomeKit with:
+
+- **Thermostat** — Current temperature, target temperature, HVAC mode (Off / Heat / Cool / Auto), and heating/cooling thresholds for auto mode
+- **Humidity Sensor** — Current relative humidity
+- **Smart Schedule Switch** — Toggle the Nest's built-in schedule on or off
+
+### Smart Schedule Switch
+
+The Smart Schedule switch controls whether the Nest thermostat follows its programmed schedule:
+
+- **ON** — The thermostat's schedule is active and drives temperature changes automatically
+- **OFF** — The schedule is cleared and the thermostat stays at whatever temperature you set manually
+
+When turned off:
+- The current schedule is cached locally so it can be restored later
+- On self-hosted servers, the Nest's learning mode is also disabled to prevent the thermostat from auto-creating new schedule entries
+- On the hosted API, the plugin monitors and re-clears the schedule during polling if learning mode recreates entries
+
+This is useful when you want to use **HomeKit automations** instead of the Nest's built-in schedule. Turn the smart schedule off, then create time-based automations in the Home app (e.g., "At 7:00 AM, set thermostat to 22°C").
+
+## Schedule Editor
+
+The plugin includes a visual schedule editor accessible from the **Homebridge UI**:
+
+1. Go to **Plugins** → **NoLongerEvil Nest** → **Settings** (click the wrench icon)
+2. The schedule editor shows a 24-hour × 7-day grid with temperature setpoints
+3. Click any day to view, add, or remove individual entries
+4. Change the schedule mode (Heat / Cool / Range)
+5. Copy a day's schedule to all weekdays
+6. Click **Save Schedule** to push changes to the thermostat
+
+> **Note:** The schedule editor requires the hosted NoLongerEvil API. Self-hosted servers do not currently support schedule management via the API.
 
 ## Getting an API Key
 
@@ -103,17 +160,6 @@ If you're running your own NoLongerEvil server instead of using the hosted servi
 2. Navigate to **Settings** → **API Keys**
 3. Create a new API key with both `read` and `write` scopes
 4. Copy the key (it starts with `nle_`)
-
-## HomeKit Features
-
-Once configured, each thermostat will appear in HomeKit with:
-
-- **Thermostat**: Control temperature and mode
-  - Current temperature
-  - Target temperature
-  - Heating/Cooling mode (Off, Heat, Cool, Auto)
-  - Heating/Cooling thresholds for Auto mode
-- **Humidity Sensor**: Current relative humidity
 
 ## Troubleshooting
 
@@ -127,16 +173,23 @@ Once configured, each thermostat will appear in HomeKit with:
 
 - Double-check that you copied the entire API key
 - Ensure the key hasn't been revoked in your account settings
+- Verify the key has both `read` and `write` scopes
 
 ### "Rate limit exceeded"
 
 - The hosted API has a limit of 20 requests per minute
 - Try increasing `pollInterval` to reduce request frequency
 
+### Schedule keeps recreating entries
+
+- This is caused by the Nest's learning mode auto-creating schedule entries based on manual temperature adjustments
+- Use the **Smart Schedule switch** to disable the schedule — on self-hosted servers this also disables learning mode
+- On the hosted API, the plugin will automatically re-clear recreated entries during polling
+- See [NoLongerEvil issue #152](https://github.com/codykociemba/NoLongerEvil-Thermostat/issues/152) for more details
+
 ### Connection errors with self-hosted server
 
-- Verify the server URL is correct and accessible
-- Check that the URL includes the `/api/v1` path
+- Verify the server URL is correct and accessible from the Homebridge host
 - Ensure the server is running and the port is open
 
 ## Links

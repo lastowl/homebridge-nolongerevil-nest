@@ -1,0 +1,894 @@
+<style>
+  :root {
+    --heat: #e94560;
+    --cool: #4a9eff;
+    --range: #7c4dff;
+    --text: #212529;
+    --text-muted: #666;
+    --bg-card: #fff;
+    --bg-surface: #f8f9fa;
+    --bg-header: #f0f0f0;
+    --bg-grid-gap: #ddd;
+    --border: #dee2e6;
+    --input-bg: #fff;
+    --input-border: #ccc;
+    --cell-hover: #e8f4ff;
+    --cell-selected: rgba(0, 123, 255, 0.25);
+    --success-bg: #d4edda;
+    --success-text: #155724;
+    --success-border: #c3e6cb;
+    --error-bg: #f8d7da;
+    --error-text: #721c24;
+    --error-border: #f5c6cb;
+    --btn-bg: #fff;
+    --btn-text: #212529;
+  }
+
+  .dark-mode {
+    --text: #e4e4e4;
+    --text-muted: #999;
+    --bg-card: #1c1c1e;
+    --bg-surface: #2c2c2e;
+    --bg-header: #2c2c2e;
+    --bg-grid-gap: #3a3a3c;
+    --border: #3a3a3c;
+    --input-bg: #2c2c2e;
+    --input-border: #3a3a3c;
+    --cell-hover: rgba(74, 158, 255, 0.15);
+    --cell-selected: rgba(0, 123, 255, 0.35);
+    --success-bg: rgba(76, 175, 80, 0.15);
+    --success-text: #81c784;
+    --success-border: rgba(76, 175, 80, 0.3);
+    --error-bg: rgba(233, 69, 96, 0.15);
+    --error-text: #ef9a9a;
+    --error-border: rgba(233, 69, 96, 0.3);
+    --btn-bg: #2c2c2e;
+    --btn-text: #e4e4e4;
+  }
+
+  .schedule-ui {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 10px 0;
+    color: var(--text);
+  }
+
+  .schedule-ui h4 { margin-bottom: 12px; }
+
+  .schedule-ui select, .schedule-ui button {
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--input-border);
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .schedule-ui button.btn-primary { background: #007bff; color: white; border-color: #007bff; }
+  .schedule-ui button.btn-danger { background: transparent; color: #dc3545; border-color: #dc3545; }
+  .schedule-ui button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .schedule-ui select { background: var(--input-bg); color: var(--text); }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .toolbar label { font-size: 13px; font-weight: 600; }
+
+  .schedule-grid {
+    display: grid;
+    grid-template-columns: 60px repeat(24, 1fr);
+    gap: 1px;
+    background: var(--bg-grid-gap);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    font-size: 11px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .grid-header {
+    background: var(--bg-header);
+    padding: 6px 2px;
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .grid-day-label {
+    background: var(--bg-header);
+    padding: 8px 6px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+  }
+
+  .grid-cell {
+    background: var(--bg-card);
+    padding: 4px 1px;
+    text-align: center;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .grid-cell:hover { background: var(--cell-hover); }
+  .grid-cell.selected { background: var(--cell-selected) !important; }
+  .grid-cell.has-entry { font-weight: 700; }
+  .grid-cell.heat { background: rgba(233, 69, 96, 0.2); color: var(--heat); }
+  .grid-cell.cool { background: rgba(74, 158, 255, 0.2); color: var(--cool); }
+  .grid-cell.range { background: linear-gradient(135deg, rgba(233,69,96,0.15), rgba(74,158,255,0.15)); }
+
+  .entry-editor {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  .entry-editor.active { display: block; }
+
+  .form-row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .form-row label { font-size: 13px; min-width: 60px; }
+
+  .form-row input {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .entry-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 13px;
+  }
+
+  .entry-item .time { font-weight: 600; min-width: 50px; }
+  .entry-item .temp { font-weight: 700; }
+  .entry-item .temp.heat { color: var(--heat); }
+  .entry-item .temp.cool { color: var(--cool); }
+  .entry-item .remove-btn { margin-left: auto; background: transparent; border: none; color: #dc3545; cursor: pointer; font-size: 14px; }
+
+  .status-msg { padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-size: 13px; display: none; }
+  .status-msg.success { display: block; background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+  .status-msg.error { display: block; background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); }
+
+  .no-schedule { text-align: center; padding: 30px; color: var(--text-muted); background: var(--bg-surface); border-radius: 6px; }
+  .loading-msg { text-align: center; padding: 30px; color: var(--text-muted); }
+
+  .mode-badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .mode-badge.heat { background: rgba(233,69,96,0.2); color: var(--heat); }
+  .mode-badge.cool { background: rgba(74,158,255,0.2); color: var(--cool); }
+  .mode-badge.range { background: rgba(180,130,255,0.2); color: var(--range); }
+
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .entry-editor hr { border-color: var(--border); }
+  .drag-hint { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+
+  .device-info-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .device-info-panel h4 { margin: 0 0 12px; color: var(--text); }
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  .info-grid-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 768px) { .info-grid-3 { grid-template-columns: 1fr; } }
+  .info-section h5 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; }
+  .info-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: var(--text); border-bottom: 1px solid var(--border); }
+  .info-row:last-child { border-bottom: none; }
+  .info-row span { color: var(--text-muted); }
+  .info-row strong { font-weight: 600; }
+  .safety-info { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 12px; color: var(--text-muted); }
+  .safety-info strong { color: var(--text); }
+</style>
+
+<div class="schedule-ui" id="app">
+  <div class="loading-msg">Loading devices...</div>
+</div>
+
+<script>
+(async () => {
+  homebridge.showSchemaForm();
+
+  try {
+    const mode = await homebridge.userCurrentLightingMode();
+    if (mode === 'dark') document.getElementById('app').classList.add('dark-mode');
+  } catch {
+    try {
+      const bg = window.getComputedStyle(document.body).backgroundColor;
+      const m = bg.match(/\d+/g);
+      if (m && m.length >= 3 && (parseInt(m[0]) + parseInt(m[1]) + parseInt(m[2])) / 3 < 128) {
+        document.getElementById('app').classList.add('dark-mode');
+      }
+    } catch {}
+  }
+
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  let currentDevices = [];
+  let currentSchedule = null;
+  let selectedDevice = null;
+  let deviceState = null; // raw device state
+  let editingDay = null;
+  let formState = { time: '08:00', temp: '22', tempHigh: '24', endTime: '' };
+  let saving = false;
+
+  // Drag state
+  let dragState = null; // { day, startHour, currentHour }
+
+  function secondsToTime(s) {
+    return `${String(Math.floor(s / 3600)).padStart(2,'0')}:${String(Math.floor((s % 3600) / 60)).padStart(2,'0')}`;
+  }
+
+  function getDeviceInfo() {
+    if (!deviceState || !deviceState.state) return null;
+    const serial = deviceState.device?.serial;
+    if (!serial) return null;
+    const dev = deviceState.state[`device.${serial}`]?.value || {};
+    const shared = deviceState.state[`shared.${serial}`]?.value || {};
+    // Find structure and user objects
+    const structKey = Object.keys(deviceState.state).find(k => k.startsWith('structure.'));
+    const userKey = Object.keys(deviceState.state).find(k => k.startsWith('user.'));
+    const struct = structKey ? deviceState.state[structKey]?.value || {} : {};
+    const user = userKey ? deviceState.state[userKey]?.value || {} : {};
+    return {
+      serial,
+      name: deviceState.device?.name || dev.device_name || `Nest ${serial.slice(-4)}`,
+      currentTemp: shared.current_temperature,
+      targetTemp: shared.target_temperature,
+      targetTempLow: shared.target_temperature_low,
+      targetTempHigh: shared.target_temperature_high,
+      mode: shared.target_temperature_type,
+      heating: shared.hvac_heater_state,
+      cooling: shared.hvac_ac_state,
+      humidity: dev.current_humidity,
+      battery: dev.battery_level,
+      leaf: dev.leaf,
+      lowerSafetyTemp: dev.lower_safety_temp,
+      lowerSafetyEnabled: dev.lower_safety_temp_enabled,
+      upperSafetyTemp: dev.upper_safety_temp,
+      upperSafetyEnabled: dev.upper_safety_temp_enabled,
+      safetyState: dev.safety_state,
+      learningMode: dev.learning_mode,
+      awayTempLow: dev.away_temperature_low,
+      awayTempHigh: dev.away_temperature_high,
+      awayTempLowEnabled: dev.away_temperature_low_enabled,
+      awayTempHighEnabled: dev.away_temperature_high_enabled,
+      backplateTemp: dev.backplate_temperature,
+      timeToTarget: dev.time_to_target,
+      tempScale: dev.temperature_scale,
+      localIp: dev.local_ip,
+      firmware: dev.current_version,
+      model: dev.model_version,
+      backplateModel: dev.backplate_model,
+      wiring: dev.hvac_wires,
+      hvacPins: dev.hvac_pins,
+      hotWaterActive: dev.hot_water_active,
+      fanState: shared.hvac_fan_state,
+      hasFan: dev.has_fan,
+      tempLock: dev.temperature_lock,
+      tempLockLow: dev.temperature_lock_low_temp,
+      tempLockHigh: dev.temperature_lock_high_temp,
+      scheduleMode: dev.current_schedule_mode,
+      macAddress: dev.mac_address,
+      postalCode: dev.postal_code,
+      country: dev.country_code,
+      heaterSource: dev.heater_source,
+      heaterDelivery: dev.heater_delivery,
+      canHeat: shared.can_heat,
+      canCool: shared.can_cool,
+      autoAway: shared.auto_away,
+      ecoMode: dev.eco?.mode,
+      rssi: dev.rssi,
+      heatLinkModel: dev.heat_link_model,
+      heatLinkSerial: dev.heat_link_serial_number,
+      heatLinkFw: dev.heat_link_sw_version,
+      backplateSerial: dev.backplate_serial_number,
+      // Structure info
+      houseType: struct.house_type,
+      numThermostats: struct.num_thermostats,
+      // User/service info
+      userName: user.name,
+      userEmail: user.email,
+    };
+  }
+
+  function timeToSeconds(t) {
+    const [h, m] = t.split(':').map(Number);
+    return h * 3600 + m * 60;
+  }
+
+  function getEntriesForDay(day) {
+    if (!currentSchedule || !currentSchedule.days[day]) return [];
+    return Object.values(currentSchedule.days[day]).sort((a, b) => a.time - b.time);
+  }
+
+  function getActiveEntryAtHour(entries, hourSec) {
+    let active = null;
+    for (const e of entries) { if (e.time <= hourSec) active = e; }
+    return active;
+  }
+
+  function showStatus(msg, type) {
+    const el = document.getElementById('sched-status');
+    if (el) {
+      el.innerHTML = `<div class="status-msg ${type}">${msg}</div>`;
+      if (type === 'success') setTimeout(() => el.innerHTML = '', 5000);
+    }
+  }
+
+  function render() {
+    const app = document.getElementById('app');
+    const isDark = app.classList.contains('dark-mode');
+
+    if (currentDevices.length === 0) {
+      app.innerHTML = '<div class="no-schedule">No thermostats found. Configure your API key below and restart Homebridge.</div>';
+      if (isDark) app.classList.add('dark-mode');
+      return;
+    }
+
+    const validDevices = currentDevices.filter(d => d.id && !d.error);
+    const errors = currentDevices.filter(d => d.error);
+
+    let html = '<h4>Schedule Editor</h4>';
+    for (const e of errors) html += `<div class="status-msg error" style="display:block">${e.error}</div>`;
+
+    if (validDevices.length > 0) {
+      html += '<div class="toolbar"><label>Thermostat:</label><select id="deviceSelect">';
+      for (const d of validDevices) {
+        const tag = d.isSelfHosted ? ' (self-hosted)' : '';
+        html += `<option value="${d.id}" data-self-hosted="${d.isSelfHosted}">${d.name} - ${d.serial}${tag}</option>`;
+      }
+      html += '</select><button onclick="window._sched.load()">Refresh</button></div>';
+    }
+
+    html += '<div id="device-info"></div>';
+    html += '<div id="sched-status"></div>';
+    html += '<div id="sched-container"><div class="loading-msg">Select a thermostat and click Refresh</div></div>';
+    html += '<div id="sched-editor" class="entry-editor"></div>';
+
+    app.innerHTML = html;
+    if (isDark) app.classList.add('dark-mode');
+    if (validDevices.length > 0) window._sched.load();
+  }
+
+  async function loadSchedule() {
+    const select = document.getElementById('deviceSelect');
+    if (!select) return;
+    const deviceId = select.value;
+    const option = select.options[select.selectedIndex];
+    const isSelfHosted = option.dataset.selfHosted === 'true';
+    selectedDevice = { id: deviceId, isSelfHosted };
+
+    document.getElementById('sched-container').innerHTML = '<div class="loading-msg">Loading...</div>';
+    hideEditor();
+
+    try {
+      const [schedResponse, stateResponse] = await Promise.all([
+        homebridge.request('/schedule', { deviceId, isSelfHosted }).catch(() => null),
+        homebridge.request('/raw-state', { deviceId, isSelfHosted }).catch(() => null),
+      ]);
+      if (schedResponse) {
+        currentSchedule = schedResponse.schedule || (schedResponse.days ? schedResponse : null);
+      }
+      deviceState = stateResponse;
+      renderSchedule();
+    } catch (error) {
+      document.getElementById('sched-container').innerHTML = `<div class="status-msg error" style="display:block">${error.message || error}</div>`;
+    }
+  }
+
+  function renderSchedule() {
+    renderDeviceInfo();
+    if (!currentSchedule) {
+      document.getElementById('sched-container').innerHTML = `<div class="no-schedule">
+        <p>No schedule configured.</p><br>
+        <button class="btn-primary" onclick="window._sched.create()">Create Schedule</button>
+      </div>`;
+      return;
+    }
+    renderScheduleGrid();
+  }
+
+  function renderDeviceInfo() {
+    const el = document.getElementById('device-info');
+    if (!el) return;
+    const info = getDeviceInfo();
+    if (!info) { el.innerHTML = ''; return; }
+
+    const modeLabel = { heat: 'Heating', cool: 'Cooling', range: 'Auto (Range)', off: 'Off' };
+    const stateIcon = info.heating ? '🔥' : info.cooling ? '❄️' : '';
+    const awayLabel = { 0: 'Home', 2: 'Away' };
+
+    let html = '<div class="device-info-panel">';
+    html += '<h4>Device Information</h4>';
+    html += '<div class="info-grid info-grid-3">';
+
+    // Column 1: Status
+    html += '<div class="info-section"><h5>Status</h5>';
+    html += `<div class="info-row"><span>Current Temp</span><strong>${info.currentTemp?.toFixed(1) ?? '—'}°C</strong></div>`;
+    html += `<div class="info-row"><span>Target Temp</span><strong>${info.targetTemp?.toFixed(1) ?? '—'}°C ${stateIcon}</strong></div>`;
+    if (info.mode === 'range') {
+      html += `<div class="info-row"><span>Heat / Cool</span><strong>${info.targetTempLow?.toFixed(1) ?? '—'} / ${info.targetTempHigh?.toFixed(1) ?? '—'}°C</strong></div>`;
+    }
+    html += `<div class="info-row"><span>Mode</span><strong>${modeLabel[info.mode] || info.mode || '—'}</strong></div>`;
+    html += `<div class="info-row"><span>Humidity</span><strong>${info.humidity ?? '—'}%</strong></div>`;
+    html += `<div class="info-row"><span>Presence</span><strong>${awayLabel[info.autoAway] ?? '—'}</strong></div>`;
+    html += `<div class="info-row"><span>Learning Mode</span><strong>${info.learningMode ? 'On' : 'Off'}</strong></div>`;
+    if (info.ecoMode) html += `<div class="info-row"><span>Eco Mode</span><strong>${info.ecoMode}</strong></div>`;
+    if (info.leaf !== undefined) html += `<div class="info-row"><span>Eco Leaf</span><strong>${info.leaf ? '🍃 Active' : 'Inactive'}</strong></div>`;
+    if (info.timeToTarget) html += `<div class="info-row"><span>Time to Target</span><strong>${info.timeToTarget} min</strong></div>`;
+    if (info.hasFan) html += `<div class="info-row"><span>Fan</span><strong>${info.fanState ? 'Running' : 'Off'}</strong></div>`;
+    if (info.tempLock) html += `<div class="info-row"><span>Temp Lock</span><strong>${info.tempLockLow?.toFixed(1)}–${info.tempLockHigh?.toFixed(1)}°C</strong></div>`;
+    html += '</div>';
+
+    // Column 2: Safety & Away
+    html += '<div class="info-section"><h5>Safety Temperatures</h5>';
+    html += `<div class="info-row"><span>Freeze Protection</span><strong>${info.lowerSafetyEnabled ? info.lowerSafetyTemp?.toFixed(1) + '°C' : 'Disabled'}</strong></div>`;
+    html += `<div class="info-row"><span>Overheat Protection</span><strong>${info.upperSafetyEnabled ? info.upperSafetyTemp?.toFixed(1) + '°C' : 'Disabled'}</strong></div>`;
+    if (info.safetyState && info.safetyState !== 'none') html += `<div class="info-row"><span>Safety State</span><strong style="color:var(--heat);">${info.safetyState}</strong></div>`;
+    html += '<h5 style="margin-top:12px;">Away Temperatures</h5>';
+    html += `<div class="info-row"><span>Away Low</span><strong>${info.awayTempLowEnabled !== false ? (info.awayTempLow?.toFixed(1) + '°C') : 'Disabled'}</strong></div>`;
+    html += `<div class="info-row"><span>Away High</span><strong>${info.awayTempHighEnabled !== false ? (info.awayTempHigh?.toFixed(1) + '°C') : 'Disabled'}</strong></div>`;
+    html += '</div>';
+
+    // Column 3: Hardware
+    html += '<div class="info-section"><h5>Hardware</h5>';
+    html += `<div class="info-row"><span>Model</span><strong>${info.model || '—'}</strong></div>`;
+    html += `<div class="info-row"><span>Firmware</span><strong>${info.firmware || '—'}</strong></div>`;
+    html += `<div class="info-row"><span>Serial</span><strong>${info.serial}</strong></div>`;
+    if (info.backplateModel) html += `<div class="info-row"><span>Backplate</span><strong>${info.backplateModel}</strong></div>`;
+    html += `<div class="info-row"><span>Battery</span><strong>${info.battery?.toFixed(2) ?? '—'}V</strong></div>`;
+    html += `<div class="info-row"><span>Backplate Temp</span><strong>${info.backplateTemp?.toFixed(1) ?? '—'}°C</strong></div>`;
+    if (info.localIp) html += `<div class="info-row"><span>Local IP</span><strong>${info.localIp}</strong></div>`;
+    if (info.macAddress) html += `<div class="info-row"><span>MAC</span><strong>${info.macAddress}</strong></div>`;
+    if (info.rssi) html += `<div class="info-row"><span>WiFi Signal</span><strong>${info.rssi} dBm</strong></div>`;
+    html += `<div class="info-row"><span>Wiring</span><strong>${info.wiring || '—'}</strong></div>`;
+    html += `<div class="info-row"><span>Heat Source</span><strong>${info.heaterSource || '—'} / ${info.heaterDelivery || '—'}</strong></div>`;
+    if (info.hotWaterActive !== undefined) html += `<div class="info-row"><span>Hot Water</span><strong>${info.hotWaterActive ? 'Active' : 'Off'}</strong></div>`;
+    html += '</div>';
+
+    html += '</div>';
+
+    // Service Information section
+    html += '<div class="info-grid info-grid-3" style="margin-top:12px;">';
+    html += '<div class="info-section"><h5>Service Information</h5>';
+    if (info.userName) html += `<div class="info-row"><span>Account</span><strong>${info.userName}</strong></div>`;
+    if (info.userEmail) html += `<div class="info-row"><span>Email</span><strong>${info.userEmail}</strong></div>`;
+    if (info.postalCode) html += `<div class="info-row"><span>Location</span><strong>${info.postalCode}, ${info.country || ''}</strong></div>`;
+    if (info.houseType && info.houseType !== 'unknown') html += `<div class="info-row"><span>House Type</span><strong>${info.houseType}</strong></div>`;
+    if (info.numThermostats) html += `<div class="info-row"><span>Thermostats</span><strong>${info.numThermostats}</strong></div>`;
+    html += `<div class="info-row"><span>Capabilities</span><strong>${[info.canHeat ? 'Heat' : '', info.canCool ? 'Cool' : ''].filter(Boolean).join(', ') || '—'}</strong></div>`;
+    html += `<div class="info-row"><span>Schedule Mode</span><strong>${info.scheduleMode || '—'}</strong></div>`;
+    html += `<div class="info-row"><span>Temp Scale</span><strong>${info.tempScale || '—'}</strong></div>`;
+    html += '</div>';
+
+    // Heat Link info (if present)
+    if (info.heatLinkSerial) {
+      html += '<div class="info-section"><h5>Heat Link</h5>';
+      html += `<div class="info-row"><span>Model</span><strong>${info.heatLinkModel || '—'}</strong></div>`;
+      html += `<div class="info-row"><span>Serial</span><strong>${info.heatLinkSerial}</strong></div>`;
+      html += `<div class="info-row"><span>Firmware</span><strong>${info.heatLinkFw || '—'}</strong></div>`;
+      if (info.backplateSerial) html += `<div class="info-row"><span>Backplate Serial</span><strong>${info.backplateSerial}</strong></div>`;
+      html += '</div>';
+    }
+
+    html += '</div></div>';
+    el.innerHTML = html;
+  }
+
+  function renderScheduleGrid() {
+    const container = document.getElementById('sched-container');
+    const mode = currentSchedule.schedule_mode || 'HEAT';
+
+    let html = '<div class="toolbar">';
+    html += '<label>Mode:</label><select id="scheduleModeSelect" onchange="window._sched.updateMode()">';
+    for (const m of ['HEAT', 'COOL', 'RANGE']) html += `<option value="${m}" ${m === mode ? 'selected' : ''}>${m}</option>`;
+    html += `</select><span class="mode-badge ${mode.toLowerCase()}">${mode}</span>`;
+    html += '<button id="sched-save-btn" class="btn-primary" onclick="window._sched.save()">Save Schedule</button></div>';
+    html += '<div class="drag-hint">Click a cell or drag across cells to set start/end time</div>';
+
+    html += '<div class="schedule-grid" id="schedGrid">';
+    html += '<div class="grid-header"></div>';
+    for (let h = 0; h < 24; h++) html += `<div class="grid-header">${h}</div>`;
+
+    for (let day = 0; day < 7; day++) {
+      html += `<div class="grid-day-label">${DAY_SHORT[day]}</div>`;
+      const entries = getEntriesForDay(day);
+
+      for (let h = 0; h < 24; h++) {
+        const hStart = h * 3600;
+        const setpoints = entries.filter(e => e.time >= hStart && e.time < hStart + 3600 && e.entry_type === 'setpoint');
+        const active = getActiveEntryAtHour(entries, hStart);
+
+        let cls = 'grid-cell';
+        let content = '';
+
+        if (setpoints.length > 0) {
+          const heatE = setpoints.find(e => e.type === 'HEAT');
+          const coolE = setpoints.find(e => e.type === 'COOL');
+          if (heatE && coolE) {
+            cls += ' has-entry range';
+            content = `${heatE.temp.toFixed(0)}-${coolE.temp.toFixed(0)}`;
+          } else {
+            cls += ' has-entry ' + setpoints[0].type.toLowerCase();
+            content = `${setpoints[0].temp.toFixed(1)}`;
+          }
+        } else if (active) {
+          cls += ' ' + active.type.toLowerCase();
+        }
+
+        html += `<div class="${cls}" data-day="${day}" data-hour="${h}" title="${DAY_NAMES[day]} ${h}:00">${content}</div>`;
+      }
+    }
+    html += '</div>';
+    container.innerHTML = html;
+
+    // Attach drag listeners
+    const grid = document.getElementById('schedGrid');
+    grid.addEventListener('mousedown', onGridMouseDown);
+    grid.addEventListener('mouseover', onGridMouseOver);
+    document.addEventListener('mouseup', onGridMouseUp);
+  }
+
+  function onGridMouseDown(e) {
+    const cell = e.target.closest('.grid-cell');
+    if (!cell) return;
+    const day = parseInt(cell.dataset.day);
+    const hour = parseInt(cell.dataset.hour);
+    dragState = { day, startHour: hour, currentHour: hour };
+    updateDragHighlight();
+    e.preventDefault();
+  }
+
+  function onGridMouseOver(e) {
+    if (!dragState) return;
+    const cell = e.target.closest('.grid-cell');
+    if (!cell) return;
+    const day = parseInt(cell.dataset.day);
+    if (day !== dragState.day) return;
+    dragState.currentHour = parseInt(cell.dataset.hour);
+    updateDragHighlight();
+  }
+
+  function onGridMouseUp() {
+    if (!dragState) return;
+    const { day, startHour, currentHour } = dragState;
+    const minH = Math.min(startHour, currentHour);
+    const maxH = Math.max(startHour, currentHour);
+
+    formState.time = `${String(minH).padStart(2,'0')}:00`;
+    if (maxH > minH) {
+      formState.endTime = `${String(maxH + 1).padStart(2,'0')}:00`;
+    } else {
+      formState.endTime = '';
+    }
+
+    // Keep cells highlighted — they'll be cleared on next drag or addEntry
+    dragState = null;
+    editDay(day);
+  }
+
+  function updateDragHighlight() {
+    if (!dragState) return;
+    clearDragHighlight();
+    const { day, startHour, currentHour } = dragState;
+    const minH = Math.min(startHour, currentHour);
+    const maxH = Math.max(startHour, currentHour);
+    const cells = document.querySelectorAll(`.grid-cell[data-day="${day}"]`);
+    cells.forEach(c => {
+      const h = parseInt(c.dataset.hour);
+      if (h >= minH && h <= maxH) c.classList.add('selected');
+    });
+  }
+
+  function clearDragHighlight() {
+    document.querySelectorAll('.grid-cell.selected').forEach(c => c.classList.remove('selected'));
+  }
+
+  function editDay(day, clickedHour) {
+    editingDay = day;
+    if (clickedHour !== undefined) {
+      formState.time = `${String(clickedHour).padStart(2,'0')}:00`;
+      formState.endTime = '';
+    }
+
+    const entries = getEntriesForDay(day).filter(e => e.entry_type === 'setpoint');
+    const isRange = currentSchedule && currentSchedule.schedule_mode === 'RANGE';
+    const editor = document.getElementById('sched-editor');
+
+    let html = `<h4>${DAY_NAMES[day]}</h4>`;
+
+    if (isRange) {
+      const timeMap = {};
+      for (const e of entries) {
+        if (!timeMap[e.time]) timeMap[e.time] = {};
+        timeMap[e.time][e.type] = e;
+      }
+      const times = Object.keys(timeMap).map(Number).sort((a, b) => a - b);
+      for (const t of times) {
+        const pair = timeMap[t];
+        const ht = pair.HEAT ? pair.HEAT.temp.toFixed(1) : '—';
+        const ct = pair.COOL ? pair.COOL.temp.toFixed(1) : '—';
+        html += `<div class="entry-item">
+          <span class="time">${secondsToTime(t)}</span>
+          <span class="temp heat">${ht}&deg;C</span>
+          <span style="color:var(--text-muted);font-size:11px;">to</span>
+          <span class="temp cool">${ct}&deg;C</span>
+          <span class="mode-badge range">RANGE</span>
+          <button class="remove-btn" onclick="window._sched.removeEntry(${day}, ${t})">&#10005;</button>
+        </div>`;
+      }
+      if (times.length === 0) html += '<div style="color:var(--text-muted);padding:8px 0;">No entries</div>';
+    } else {
+      for (const e of entries) {
+        const tc = e.type.toLowerCase();
+        html += `<div class="entry-item">
+          <span class="time">${secondsToTime(e.time)}</span>
+          <span class="temp ${tc}">${e.temp.toFixed(1)}&deg;C</span>
+          <span class="mode-badge ${tc}">${e.type}</span>
+          <button class="remove-btn" onclick="window._sched.removeEntry(${day}, ${e.time})">&#10005;</button>
+        </div>`;
+      }
+      if (entries.length === 0) html += '<div style="color:var(--text-muted);padding:8px 0;">No entries</div>';
+    }
+
+    html += '<hr style="margin:12px 0;">';
+    html += '<div class="form-row">';
+    html += `<label>Start:</label><input type="time" id="newTime" value="${formState.time}" onchange="window._sched.saveForm()">`;
+    if (isRange) {
+      html += `<label>Heat to:</label><input type="text" id="newTemp" value="${formState.temp}" style="width:70px" onchange="window._sched.saveForm()">`;
+      html += `<label>Cool to:</label><input type="text" id="newTempHigh" value="${formState.tempHigh}" style="width:70px" onchange="window._sched.saveForm()">`;
+    } else {
+      html += `<label>Temp (&deg;C):</label><input type="text" id="newTemp" value="${formState.temp}" style="width:70px" onchange="window._sched.saveForm()">`;
+    }
+    html += '</div>';
+    html += '<div class="form-row">';
+    html += `<label>End:</label><input type="time" id="newEndTime" value="${formState.endTime}" onchange="window._sched.saveForm()">`;
+    html += '</div>';
+
+    // Safety temp info
+    const info = getDeviceInfo();
+    if (info) {
+      const mode = currentSchedule?.schedule_mode || 'HEAT';
+      html += '<div class="safety-info">';
+      if (mode === 'RANGE') {
+        html += `<strong>Safety temps:</strong> Heat floor: ${info.lowerSafetyEnabled ? info.lowerSafetyTemp?.toFixed(1) + '°C' : 'Disabled'} · Cool ceiling: ${info.upperSafetyEnabled ? info.upperSafetyTemp?.toFixed(1) + '°C' : 'Disabled'}`;
+        html += '<br>When an end time is set, the schedule will revert to these safety temperatures.';
+      } else if (mode === 'COOL') {
+        html += `<strong>Safety temp:</strong> ${info.upperSafetyEnabled ? info.upperSafetyTemp?.toFixed(1) + '°C' : 'Not set'}`;
+        html += '<br>When an end time is set, the schedule will revert to this safety temperature.';
+      } else {
+        html += `<strong>Safety temp:</strong> ${info.lowerSafetyEnabled ? info.lowerSafetyTemp?.toFixed(1) + '°C' : 'Not set'}`;
+        html += '<br>When an end time is set, the schedule will revert to this safety temperature.';
+      }
+      html += '</div>';
+    }
+    html += '<div class="actions">';
+    html += `<button class="btn-primary" onclick="window._sched.addEntry(${day})">Add Entry</button>`;
+    html += `<button onclick="window._sched.copyDay(${day})">Copy to Weekdays</button>`;
+    html += `<button class="btn-danger" onclick="window._sched.clearDay(${day})">Clear Day</button>`;
+    html += '</div>';
+
+    editor.innerHTML = html;
+    editor.classList.add('active');
+  }
+
+  function saveFormState() {
+    const t = document.getElementById('newTime');
+    const tmp = document.getElementById('newTemp');
+    const tmpH = document.getElementById('newTempHigh');
+    const et = document.getElementById('newEndTime');
+    if (t) formState.time = t.value;
+    if (tmp) formState.temp = tmp.value;
+    if (tmpH) formState.tempHigh = tmpH.value;
+    if (et) formState.endTime = et.value;
+  }
+
+  function hideEditor() {
+    const el = document.getElementById('sched-editor');
+    if (el) el.classList.remove('active');
+  }
+
+  function validateTemp(value) {
+    const num = parseFloat(value);
+    if (isNaN(num)) return null;
+    if (num < 5 || num > 35) return null;
+    return Math.round(num * 2) / 2;
+  }
+
+  function addEntry(day) {
+    if (!currentSchedule) return;
+    saveFormState();
+
+    const isRange = currentSchedule.schedule_mode === 'RANGE';
+
+    const temp = validateTemp(document.getElementById('newTemp').value);
+    if (temp === null) {
+      showStatus(isRange ? 'Invalid heat temperature (5-35).' : 'Invalid temperature (5-35).', 'error');
+      return;
+    }
+
+    let tempHigh = null;
+    if (isRange) {
+      tempHigh = validateTemp(document.getElementById('newTempHigh').value);
+      if (tempHigh === null) { showStatus('Invalid cool temperature (5-35).', 'error'); return; }
+      if (tempHigh <= temp) { showStatus('Cool temp must be higher than heat temp.', 'error'); return; }
+    }
+
+    const timeStr = document.getElementById('newTime').value;
+    if (!timeStr) { showStatus('Please set a start time.', 'error'); return; }
+    const time = timeToSeconds(timeStr);
+    const endTimeStr = document.getElementById('newEndTime').value;
+
+    // Validate end time before modifying schedule
+    let endTime = null;
+    if (endTimeStr) {
+      endTime = timeToSeconds(endTimeStr);
+      if (endTime <= time) { showStatus('End time must be after start time.', 'error'); return; }
+    }
+
+    // Snapshot previous entries BEFORE adding new ones
+    const prevEntries = getEntriesForDay(day);
+
+    if (!currentSchedule.days[day]) currentSchedule.days[day] = {};
+    let keys = Object.keys(currentSchedule.days[day]).map(Number);
+    let next = keys.length > 0 ? Math.max(...keys) + 1 : 0;
+
+    if (isRange) {
+      currentSchedule.days[day][next] = { temp, time, type: 'HEAT', entry_type: 'setpoint' };
+      next++;
+      currentSchedule.days[day][next] = { temp: tempHigh, time, type: 'COOL', entry_type: 'setpoint' };
+    } else {
+      currentSchedule.days[day][next] = { temp, time, type: currentSchedule.schedule_mode || 'HEAT', entry_type: 'setpoint' };
+    }
+
+    // Add end setpoint — revert to safety temperatures
+    if (endTime !== null) {
+      const info = getDeviceInfo();
+      if (isRange) {
+        const safetyLow = (info?.lowerSafetyEnabled && info?.lowerSafetyTemp) ? info.lowerSafetyTemp : 5;
+        const safetyHigh = (info?.upperSafetyEnabled && info?.upperSafetyTemp) ? info.upperSafetyTemp : 35;
+        next++;
+        currentSchedule.days[day][next] = { temp: safetyLow, time: endTime, type: 'HEAT', entry_type: 'setpoint' };
+        next++;
+        currentSchedule.days[day][next] = { temp: safetyHigh, time: endTime, type: 'COOL', entry_type: 'setpoint' };
+      } else {
+        const mode = currentSchedule.schedule_mode || 'HEAT';
+        const safetyTemp = mode === 'COOL'
+          ? ((info?.upperSafetyEnabled && info?.upperSafetyTemp) ? info.upperSafetyTemp : 35)
+          : ((info?.lowerSafetyEnabled && info?.lowerSafetyTemp) ? info.lowerSafetyTemp : 5);
+        next++;
+        currentSchedule.days[day][next] = { temp: safetyTemp, time: endTime, type: mode, entry_type: 'setpoint' };
+      }
+    }
+
+    renderScheduleGrid();
+    editDay(day);
+    showStatus(endTime !== null ? 'Duration entry added. Click Save Schedule to apply.' : 'Entry added. Click Save Schedule to apply.', 'success');
+  }
+
+  function removeEntry(day, time) {
+    if (!currentSchedule || !currentSchedule.days[day]) return;
+    saveFormState();
+    const d = currentSchedule.days[day];
+    for (const k in d) {
+      if (d[k].time === time && d[k].entry_type === 'setpoint') delete d[k];
+    }
+    const sorted = Object.values(d).sort((a, b) => a.time - b.time);
+    currentSchedule.days[day] = {};
+    sorted.forEach((e, i) => currentSchedule.days[day][i] = e);
+    if (Object.keys(currentSchedule.days[day]).length === 0) delete currentSchedule.days[day];
+    renderScheduleGrid();
+    editDay(day);
+    showStatus('Entry removed. Click Save Schedule to apply.', 'success');
+  }
+
+  function clearDay(day) {
+    if (!currentSchedule) return;
+    saveFormState();
+    delete currentSchedule.days[day];
+    renderScheduleGrid();
+    editDay(day);
+    showStatus(`${DAY_NAMES[day]} cleared. Click Save Schedule to apply.`, 'success');
+  }
+
+  function copyDay(src) {
+    if (!currentSchedule || !currentSchedule.days[src]) return;
+    saveFormState();
+    for (let d = 1; d <= 5; d++) {
+      if (d === src) continue;
+      currentSchedule.days[d] = JSON.parse(JSON.stringify(currentSchedule.days[src]));
+    }
+    renderScheduleGrid();
+    showStatus('Copied to weekdays. Click Save Schedule to apply.', 'success');
+  }
+
+  function updateMode() {
+    if (!currentSchedule) return;
+    const mode = document.getElementById('scheduleModeSelect').value;
+    currentSchedule.schedule_mode = mode;
+    for (const day in currentSchedule.days) {
+      for (const k in currentSchedule.days[day]) {
+        currentSchedule.days[day][k].type = mode;
+      }
+    }
+    renderScheduleGrid();
+  }
+
+  function createEmpty() {
+    currentSchedule = { ver: 2, days: {}, name: 'Custom Schedule', schedule_mode: 'HEAT' };
+    renderScheduleGrid();
+  }
+
+  async function saveSchedule() {
+    if (!currentSchedule || !selectedDevice || saving) return;
+    saving = true;
+    const btn = document.querySelector('#sched-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    try {
+      await homebridge.request('/schedule/update', {
+        deviceId: selectedDevice.id,
+        schedule: currentSchedule,
+        isSelfHosted: selectedDevice.isSelfHosted,
+      });
+      showStatus('Schedule saved!', 'success');
+      homebridge.toast.success('Schedule saved successfully.');
+    } catch (error) {
+      showStatus('Failed to save: ' + (error.message || error), 'error');
+      homebridge.toast.error('Failed to save schedule.', error.message || String(error));
+    } finally {
+      saving = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Schedule'; }
+    }
+  }
+
+  async function showRawState() {
+    if (!selectedDevice) { homebridge.toast.error('Select a device first.'); return; }
+    try {
+      const raw = await homebridge.request('/raw-state', {
+        deviceId: selectedDevice.id,
+        isSelfHosted: selectedDevice.isSelfHosted,
+      });
+      const container = document.getElementById('sched-container');
+      container.innerHTML = '<h4>Raw Device State</h4><pre style="max-height:500px;overflow:auto;background:var(--card-bg);padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;word-break:break-all;">' +
+        JSON.stringify(raw, null, 2).replace(/</g, '&lt;') + '</pre>' +
+        '<button class="btn-primary" onclick="window._sched.load()" style="margin-top:10px;">Back to Schedule</button>';
+    } catch (error) {
+      homebridge.toast.error('Failed to load raw state.', error.message || String(error));
+    }
+  }
+
+  window._sched = {
+    load: loadSchedule,
+    save: saveSchedule,
+    create: createEmpty,
+    editDay,
+    addEntry,
+    removeEntry,
+    clearDay,
+    copyDay,
+    updateMode,
+    saveForm: saveFormState,
+    rawState: showRawState,
+  };
+
+  try {
+    currentDevices = await homebridge.request('/devices');
+  } catch (e) {
+    currentDevices = [];
+  }
+
+  render();
+})();
+</script>

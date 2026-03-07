@@ -1,7 +1,7 @@
 import { Logger } from 'homebridge';
 import * as https from 'https';
 import * as http from 'http';
-import { ThermostatApiClient, ThermostatState } from './api';
+import { ThermostatApiClient, ThermostatState, ThermostatSchedule } from './api';
 
 // Self-hosted API response types
 interface SelfHostedDevice {
@@ -50,6 +50,10 @@ export class SelfHostedAPI implements ThermostatApiClient {
 
   get sourceLabel(): string {
     return `self-hosted@${this.baseUrl}`;
+  }
+
+  get supportsLearningMode(): boolean {
+    return true;
   }
 
   private request<T>(
@@ -189,6 +193,45 @@ export class SelfHostedAPI implements ThermostatApiClient {
       action: 'away',
       value: away,
     });
+  }
+
+  async getSchedule(_deviceId: string): Promise<ThermostatSchedule | null> {
+    this.log.warn('Schedule management is not supported on self-hosted servers');
+    return null;
+  }
+
+  async setSchedule(_deviceId: string, _schedule: ThermostatSchedule): Promise<void> {
+    this.log.warn('Schedule management is not supported on self-hosted servers');
+  }
+
+  async clearSchedule(_deviceId: string): Promise<void> {
+    this.log.warn('Schedule management is not supported on self-hosted servers');
+  }
+
+  async setLearningMode(deviceId: string, enabled: boolean): Promise<void> {
+    // Nest thermostats use 'learning_mode' in device.{serial}
+    // Some firmware versions also use 'auto_schedule_enable'
+    try {
+      await this.request<CommandResponse>('POST', '/command', {
+        serial: deviceId,
+        action: 'set',
+        field: 'learning_mode',
+        value: enabled,
+      });
+    } catch (error) {
+      this.log.debug('Failed to set learning_mode, trying auto_schedule_enable:', error);
+    }
+
+    try {
+      await this.request<CommandResponse>('POST', '/command', {
+        serial: deviceId,
+        action: 'set',
+        field: 'auto_schedule_enable',
+        value: enabled,
+      });
+    } catch (error) {
+      this.log.debug('Failed to set auto_schedule_enable:', error);
+    }
   }
 
   private parseStatus(serial: string, response: SelfHostedStatusResponse): ThermostatState | null {

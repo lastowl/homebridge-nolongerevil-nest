@@ -53,6 +53,9 @@ class NoLongerEvilAPI {
     get sourceLabel() {
         return this.baseUrl === HOSTED_API_URL ? 'hosted' : `hosted@${this.baseUrl}`;
     }
+    get supportsLearningMode() {
+        return false;
+    }
     request(method, path, body) {
         return new Promise((resolve, reject) => {
             const fullUrl = `${this.baseUrl}${path}`;
@@ -132,6 +135,31 @@ class NoLongerEvilAPI {
         await this.request('POST', `/thermostat/${deviceId}/away`, {
             away,
         });
+    }
+    async getSchedule(deviceId) {
+        try {
+            const response = await this.request('GET', `/thermostat/${deviceId}/schedule`);
+            return response.schedule;
+        }
+        catch (error) {
+            this.log.error(`Failed to get schedule for ${deviceId}:`, error);
+            return null;
+        }
+    }
+    async setSchedule(deviceId, schedule) {
+        await this.request('PUT', `/thermostat/${deviceId}/schedule`, { schedule });
+    }
+    async clearSchedule(deviceId) {
+        const emptySchedule = {
+            ver: 2,
+            days: {},
+            name: 'Cleared',
+            schedule_mode: 'HEAT',
+        };
+        await this.request('PUT', `/thermostat/${deviceId}/schedule`, { schedule: emptySchedule });
+    }
+    async setLearningMode(_deviceId, _enabled) {
+        this.log.warn('Learning mode control is not available on the hosted API');
     }
     parseDeviceStatus(deviceId, response) {
         const serial = response.device.serial;

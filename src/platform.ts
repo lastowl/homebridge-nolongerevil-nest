@@ -26,6 +26,7 @@ export interface NoLongerEvilConfig extends PlatformConfig {
   // Multi-source config
   servers?: ServerConfig[];
   pollInterval?: number;
+  enableScheduleSwitch?: boolean;
 }
 
 export class NoLongerEvilPlatform implements DynamicPlatformPlugin {

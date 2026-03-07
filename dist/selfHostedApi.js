@@ -51,6 +51,9 @@ class SelfHostedAPI {
     get sourceLabel() {
         return `self-hosted@${this.baseUrl}`;
     }
+    get supportsLearningMode() {
+        return true;
+    }
     request(method, path, body) {
         return new Promise((resolve, reject) => {
             const fullUrl = `${this.baseUrl}${path}`;
@@ -164,6 +167,42 @@ class SelfHostedAPI {
             action: 'away',
             value: away,
         });
+    }
+    async getSchedule(_deviceId) {
+        this.log.warn('Schedule management is not supported on self-hosted servers');
+        return null;
+    }
+    async setSchedule(_deviceId, _schedule) {
+        this.log.warn('Schedule management is not supported on self-hosted servers');
+    }
+    async clearSchedule(_deviceId) {
+        this.log.warn('Schedule management is not supported on self-hosted servers');
+    }
+    async setLearningMode(deviceId, enabled) {
+        // Nest thermostats use 'learning_mode' in device.{serial}
+        // Some firmware versions also use 'auto_schedule_enable'
+        try {
+            await this.request('POST', '/command', {
+                serial: deviceId,
+                action: 'set',
+                field: 'learning_mode',
+                value: enabled,
+            });
+        }
+        catch (error) {
+            this.log.debug('Failed to set learning_mode, trying auto_schedule_enable:', error);
+        }
+        try {
+            await this.request('POST', '/command', {
+                serial: deviceId,
+                action: 'set',
+                field: 'auto_schedule_enable',
+                value: enabled,
+            });
+        }
+        catch (error) {
+            this.log.debug('Failed to set auto_schedule_enable:', error);
+        }
     }
     parseStatus(serial, response) {
         const deviceState = response.deviceState?.[serial];

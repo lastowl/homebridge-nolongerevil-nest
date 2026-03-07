@@ -9,11 +9,13 @@ import { ThermostatApiClient, ThermostatState } from './api';
 export class NestThermostatAccessory {
   private readonly thermostatService: Service;
   private readonly humidityService: Service;
+  private scheduleSwitch?: Service;
 
   private state: ThermostatState;
   private readonly pollInterval: number;
   private pollTimer?: NodeJS.Timeout;
   private readonly apiClient: ThermostatApiClient;
+  private smartScheduleEnabled = true;
 
   constructor(
     private readonly platform: NoLongerEvilPlatform,
@@ -100,8 +102,73 @@ export class NestThermostatAccessory {
     this.humidityService.getCharacteristic(this.platform.Characteristic.CurrentRelativeHumidity)
       .onGet(this.getCurrentHumidity.bind(this));
 
+    // Smart Schedule switch
+    if (this.platform.config.enableScheduleSwitch !== false) {
+      this.setupScheduleSwitch();
+    }
+
     // Start polling for updates
     this.startPolling();
+  }
+
+  private setupScheduleSwitch(): void {
+    if (this.accessory.context.smartScheduleEnabled !== undefined) {
+      this.smartScheduleEnabled = this.accessory.context.smartScheduleEnabled;
+    }
+
+    this.scheduleSwitch = this.accessory.getService('Smart Schedule')
+      || this.accessory.addService(this.platform.Service.Switch, 'Smart Schedule', 'smart-schedule');
+
+    this.scheduleSwitch.setCharacteristic(
+      this.platform.Characteristic.Name,
+      `${this.state.name} Learning Mode`,
+    );
+
+    this.scheduleSwitch.getCharacteristic(this.platform.Characteristic.On)
+      .onGet(() => this.smartScheduleEnabled)
+      .onSet(this.setSmartSchedule.bind(this));
+
+    // On first load, check if schedule has entries to determine initial state
+    this.initScheduleState();
+  }
+
+  private async initScheduleState(): Promise<void> {
+    try {
+      const schedule = await this.apiClient.getSchedule(this.state.deviceId);
+      if (schedule) {
+        const hasEntries = Object.keys(schedule.days).length > 0;
+        this.smartScheduleEnabled = hasEntries || (this.accessory.context.smartScheduleEnabled ?? false);
+        this.accessory.context.smartScheduleEnabled = this.smartScheduleEnabled;
+        this.scheduleSwitch?.updateCharacteristic(
+          this.platform.Characteristic.On,
+          this.smartScheduleEnabled,
+        );
+      }
+    } catch (error) {
+      this.platform.log.debug('Could not fetch initial schedule state:', error);
+    }
+  }
+
+  private async setSmartSchedule(value: CharacteristicValue): Promise<void> {
+    const enable = value as boolean;
+    this.platform.log.info(`${enable ? 'Enabling' : 'Disabling'} Smart Schedule (learning mode) for ${this.state.name}`);
+
+    try {
+      if (this.apiClient.supportsLearningMode) {
+        await this.apiClient.setLearningMode(this.state.deviceId, enable);
+        this.platform.log.info(`Learning mode ${enable ? 'enabled' : 'disabled'} for ${this.state.name}`);
+      } else {
+        this.platform.log.info(`Smart Schedule ${enable ? 'enabled' : 'disabled'} for ${this.state.name} (learning mode not supported on hosted API)`);
+      }
+
+      this.smartScheduleEnabled = enable;
+      this.accessory.context.smartScheduleEnabled = enable;
+    } catch (error) {
+      this.platform.log.error('Failed to toggle Smart Schedule:', error);
+      throw new this.platform.api.hap.HapStatusError(
+        this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE,
+      );
+    }
   }
 
   private startPolling(): void {
@@ -123,6 +190,7 @@ export class NestThermostatAccessory {
       this.state = newState;
       this.updateCharacteristics();
     }
+
   }
 
   private updateCharacteristics(): void {

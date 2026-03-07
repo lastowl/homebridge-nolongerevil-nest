@@ -6,11 +6,16 @@ export declare class NestThermostatAccessory {
     private readonly accessory;
     private readonly thermostatService;
     private readonly humidityService;
+    private scheduleSwitch?;
     private state;
     private readonly pollInterval;
     private pollTimer?;
     private readonly apiClient;
+    private smartScheduleEnabled;
     constructor(platform: NoLongerEvilPlatform, accessory: PlatformAccessory, initialState: ThermostatState, apiClient: ThermostatApiClient);
+    private setupScheduleSwitch;
+    private initScheduleState;
+    private setSmartSchedule;
     private startPolling;
     stopPolling(): void;
     refreshState(): Promise<void>;

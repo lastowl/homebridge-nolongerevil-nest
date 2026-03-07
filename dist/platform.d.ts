@@ -9,6 +9,7 @@ export interface NoLongerEvilConfig extends PlatformConfig {
     serverUrl?: string;
     servers?: ServerConfig[];
     pollInterval?: number;
+    enableScheduleSwitch?: boolean;
 }
 export declare class NoLongerEvilPlatform implements DynamicPlatformPlugin {
     readonly log: Logger;

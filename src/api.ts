@@ -43,6 +43,29 @@ export interface ThermostatState {
   name: string;
 }
 
+export interface ScheduleEntry {
+  temp: number;
+  time: number;
+  type: 'HEAT' | 'COOL' | 'RANGE';
+  entry_type: 'setpoint' | 'continuation';
+}
+
+export interface ThermostatSchedule {
+  ver: number;
+  days: Record<string, Record<string, ScheduleEntry>>;
+  name: string;
+  schedule_mode: 'HEAT' | 'COOL' | 'RANGE';
+}
+
+export interface ScheduleResponse {
+  device: {
+    id: string;
+    serial: string;
+    name: string | null;
+  };
+  schedule: ThermostatSchedule | null;
+}
+
 // Common interface for all API backends (hosted, self-hosted, etc.)
 export interface ThermostatApiClient {
   getThermostatStates(): Promise<ThermostatState[]>;
@@ -51,6 +74,11 @@ export interface ThermostatApiClient {
   setTemperatureRange(deviceId: string, lowTemperature: number, highTemperature: number): Promise<void>;
   setMode(deviceId: string, mode: 'off' | 'heat' | 'cool' | 'heat-cool'): Promise<void>;
   setAwayMode(deviceId: string, away: boolean): Promise<void>;
+  getSchedule(deviceId: string): Promise<ThermostatSchedule | null>;
+  setSchedule(deviceId: string, schedule: ThermostatSchedule): Promise<void>;
+  clearSchedule(deviceId: string): Promise<void>;
+  setLearningMode(deviceId: string, enabled: boolean): Promise<void>;
+  readonly supportsLearningMode: boolean;
   readonly sourceLabel: string;
 }
 
@@ -74,6 +102,10 @@ export class NoLongerEvilAPI implements ThermostatApiClient {
 
   get sourceLabel(): string {
     return this.baseUrl === HOSTED_API_URL ? 'hosted' : `hosted@${this.baseUrl}`;
+  }
+
+  get supportsLearningMode(): boolean {
+    return false;
   }
 
   private request<T>(
@@ -176,6 +208,34 @@ export class NoLongerEvilAPI implements ThermostatApiClient {
     await this.request('POST', `/thermostat/${deviceId}/away`, {
       away,
     });
+  }
+
+  async getSchedule(deviceId: string): Promise<ThermostatSchedule | null> {
+    try {
+      const response = await this.request<ScheduleResponse>('GET', `/thermostat/${deviceId}/schedule`);
+      return response.schedule;
+    } catch (error) {
+      this.log.error(`Failed to get schedule for ${deviceId}:`, error);
+      return null;
+    }
+  }
+
+  async setSchedule(deviceId: string, schedule: ThermostatSchedule): Promise<void> {
+    await this.request('PUT', `/thermostat/${deviceId}/schedule`, { schedule });
+  }
+
+  async clearSchedule(deviceId: string): Promise<void> {
+    const emptySchedule: ThermostatSchedule = {
+      ver: 2,
+      days: {},
+      name: 'Cleared',
+      schedule_mode: 'HEAT',
+    };
+    await this.request('PUT', `/thermostat/${deviceId}/schedule`, { schedule: emptySchedule });
+  }
+
+  async setLearningMode(_deviceId: string, _enabled: boolean): Promise<void> {
+    this.log.warn('Learning mode control is not available on the hosted API');
   }
 
   parseDeviceStatus(deviceId: string, response: DeviceStatusResponse): ThermostatState {

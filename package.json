@@ -1,7 +1,7 @@
 {
   "name": "homebridge-nolongerevil-nest",
   "displayName": "NoLongerEvil Nest",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Homebridge plugin for NoLongerEvil Nest Gen 1 & 2 thermostats - revive your bricked Nest thermostat",
   "main": "dist/index.js",
   "scripts": {
@@ -46,9 +46,13 @@
   },
   "files": [
     "dist",
-    "config.schema.json"
+    "config.schema.json",
+    "homebridge-ui",
+    "CHANGELOG.md"
   ],
-  "dependencies": {},
+  "dependencies": {
+    "@homebridge/plugin-ui-utils": "^1.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
