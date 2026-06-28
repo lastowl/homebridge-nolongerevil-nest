@@ -5,10 +5,12 @@ export declare class SelfHostedAPI implements ThermostatApiClient {
     private readonly apiKey;
     private readonly log;
     private readonly isHttps;
+    private readonly readFailures;
     constructor(apiKey: string, serverUrl: string, log: Logger);
     get sourceLabel(): string;
     get supportsLearningMode(): boolean;
     private request;
+    private requestOnce;
     getThermostatStates(): Promise<ThermostatState[]>;
     getThermostatState(deviceId: string): Promise<ThermostatState | null>;
     private parseDevice;

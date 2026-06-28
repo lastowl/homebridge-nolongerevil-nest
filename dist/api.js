@@ -33,15 +33,47 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NoLongerEvilAPI = void 0;
+exports.NoLongerEvilAPI = exports.FAILURE_LOG_THRESHOLD = exports.REQUEST_TIMEOUT_MS = exports.RETRY_BASE_DELAY_MS = exports.MAX_RETRIES = exports.RETRYABLE_STATUS = void 0;
+exports.httpError = httpError;
+exports.isRetryable = isRetryable;
+exports.backoffDelay = backoffDelay;
+exports.sleep = sleep;
 const https = __importStar(require("https"));
 const http = __importStar(require("http"));
 const HOSTED_API_URL = 'https://nolongerevil.com/api/v1';
+// The hosted API occasionally returns transient upstream failures (Cloudflare-style
+// 5xx, rate limiting, and intermittent 401s during those incidents). Idempotent GET
+// reads are retried with backoff before an error is surfaced, which keeps both the
+// polling path and the logs quiet through short-lived blips.
+exports.RETRYABLE_STATUS = new Set([401, 408, 429, 500, 502, 503, 504]);
+exports.MAX_RETRIES = 2;
+exports.RETRY_BASE_DELAY_MS = 400;
+exports.REQUEST_TIMEOUT_MS = 15000;
+// Number of consecutive read failures logged quietly (debug) before one warn is emitted.
+exports.FAILURE_LOG_THRESHOLD = 3;
+function httpError(message, statusCode) {
+    const err = new Error(message);
+    err.statusCode = statusCode;
+    return err;
+}
+function isRetryable(error) {
+    const status = error.statusCode;
+    // Network/timeout errors carry no status code and are always treated as transient.
+    return status === undefined || exports.RETRYABLE_STATUS.has(status);
+}
+function backoffDelay(attempt) {
+    return exports.RETRY_BASE_DELAY_MS * Math.pow(2, attempt) + Math.floor(Math.random() * exports.RETRY_BASE_DELAY_MS);
+}
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 class NoLongerEvilAPI {
     baseUrl;
     apiKey;
     log;
     isHttps;
+    // Tracks consecutive read failures per device so transient blips stay quiet.
+    readFailures = new Map();
     constructor(apiKey, log, serverUrl) {
         // Use custom server URL if provided, otherwise use hosted API
         this.baseUrl = serverUrl ? serverUrl.replace(/\/$/, '') : HOSTED_API_URL;
@@ -56,7 +88,25 @@ class NoLongerEvilAPI {
     get supportsLearningMode() {
         return false;
     }
-    request(method, path, body) {
+    async request(method, path, body) {
+        for (let attempt = 0;; attempt++) {
+            try {
+                return await this.requestOnce(method, path, body);
+            }
+            catch (error) {
+                // Only retry idempotent reads, and only for transient failures.
+                const canRetry = method === 'GET' && attempt < exports.MAX_RETRIES && isRetryable(error);
+                if (!canRetry) {
+                    throw error;
+                }
+                const wait = backoffDelay(attempt);
+                this.log.debug(`Request ${method} ${path} failed (${error.message}); ` +
+                    `retrying in ${wait}ms (attempt ${attempt + 2}/${exports.MAX_RETRIES + 1})`);
+                await sleep(wait);
+            }
+        }
+    }
+    requestOnce(method, path, body) {
         return new Promise((resolve, reject) => {
             const fullUrl = `${this.baseUrl}${path}`;
             const url = new URL(fullUrl);
@@ -88,15 +138,18 @@ class NoLongerEvilAPI {
                         }
                     }
                     else if (res.statusCode === 429) {
-                        reject(new Error('Rate limit exceeded. Please wait before making more requests.'));
+                        reject(httpError('Rate limit exceeded. Please wait before making more requests.', 429));
                     }
                     else if (res.statusCode === 401) {
-                        reject(new Error('Invalid API key. Please check your configuration.'));
+                        reject(httpError('Invalid API key. Please check your configuration.', 401));
                     }
                     else {
-                        reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+                        reject(httpError(`HTTP ${res.statusCode}: ${data}`, res.statusCode));
                     }
                 });
+            });
+            req.setTimeout(exports.REQUEST_TIMEOUT_MS, () => {
+                req.destroy(new Error(`Request timed out after ${exports.REQUEST_TIMEOUT_MS}ms`));
             });
             req.on('error', reject);
             if (body) {
@@ -246,10 +299,26 @@ class NoLongerEvilAPI {
     async getThermostatState(deviceId) {
         try {
             const status = await this.getDeviceStatus(deviceId);
+            const prevFailures = this.readFailures.get(deviceId) ?? 0;
+            if (prevFailures > exports.FAILURE_LOG_THRESHOLD) {
+                this.log.info(`Recovered state updates for ${deviceId} after ${prevFailures} failed attempts`);
+            }
+            this.readFailures.delete(deviceId);
             return this.parseDeviceStatus(deviceId, status);
         }
         catch (error) {
-            this.log.error(`Failed to get state for ${deviceId}:`, error);
+            const failures = (this.readFailures.get(deviceId) ?? 0) + 1;
+            this.readFailures.set(deviceId, failures);
+            const message = error instanceof Error ? error.message : String(error);
+            // Cached state is retained on failure, so don't spam errors for short-lived
+            // upstream blips. Log quietly at first, emit a single warn if it persists.
+            if (failures <= exports.FAILURE_LOG_THRESHOLD) {
+                this.log.debug(`Failed to get state for ${deviceId} (transient, attempt ${failures}): ${message}`);
+            }
+            else if (failures === exports.FAILURE_LOG_THRESHOLD + 1) {
+                this.log.warn(`Repeated failures getting state for ${deviceId} — the upstream API appears to be down. ` +
+                    `Keeping cached values and suppressing further messages until it recovers. Last error: ${message}`);
+            }
             return null;
         }
     }

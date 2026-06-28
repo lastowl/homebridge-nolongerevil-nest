@@ -1,7 +1,18 @@
 import { Logger } from 'homebridge';
 import * as https from 'https';
 import * as http from 'http';
-import { ThermostatApiClient, ThermostatState, ThermostatSchedule } from './api';
+import {
+  ThermostatApiClient,
+  ThermostatState,
+  ThermostatSchedule,
+  MAX_RETRIES,
+  REQUEST_TIMEOUT_MS,
+  FAILURE_LOG_THRESHOLD,
+  httpError,
+  isRetryable,
+  backoffDelay,
+  sleep,
+} from './api';
 
 // Self-hosted API response types (flat device model from the production
 // NoLongerEvil-SelfHosted server).
@@ -38,6 +49,8 @@ export class SelfHostedAPI implements ThermostatApiClient {
   private readonly apiKey: string;
   private readonly log: Logger;
   private readonly isHttps: boolean;
+  // Tracks consecutive read failures per device so transient blips stay quiet.
+  private readonly readFailures = new Map<string, number>();
 
   constructor(apiKey: string, serverUrl: string, log: Logger) {
     this.baseUrl = serverUrl.replace(/\/$/, '');
@@ -56,7 +69,31 @@ export class SelfHostedAPI implements ThermostatApiClient {
     return true;
   }
 
-  private request<T>(
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.requestOnce<T>(method, path, body);
+      } catch (error) {
+        // Only retry idempotent reads, and only for transient failures.
+        const canRetry = method === 'GET' && attempt < MAX_RETRIES && isRetryable(error);
+        if (!canRetry) {
+          throw error;
+        }
+        const wait = backoffDelay(attempt);
+        this.log.debug(
+          `Request ${method} ${path} failed (${(error as Error).message}); ` +
+          `retrying in ${wait}ms (attempt ${attempt + 2}/${MAX_RETRIES + 1})`,
+        );
+        await sleep(wait);
+      }
+    }
+  }
+
+  private requestOnce<T>(
     method: string,
     path: string,
     body?: unknown,
@@ -94,11 +131,15 @@ export class SelfHostedAPI implements ThermostatApiClient {
               resolve(data as unknown as T);
             }
           } else if (res.statusCode === 401) {
-            reject(new Error('Invalid API key. Please check your self-hosted server configuration.'));
+            reject(httpError('Invalid API key. Please check your self-hosted server configuration.', 401));
           } else {
-            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+            reject(httpError(`HTTP ${res.statusCode}: ${data}`, res.statusCode));
           }
         });
+      });
+
+      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+        req.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms`));
       });
 
       req.on('error', reject);
@@ -127,6 +168,12 @@ export class SelfHostedAPI implements ThermostatApiClient {
   async getThermostatState(deviceId: string): Promise<ThermostatState | null> {
     try {
       const response = await this.request<DevicesResponse>('GET', '/api/devices');
+      const prevFailures = this.readFailures.get(deviceId) ?? 0;
+      if (prevFailures > FAILURE_LOG_THRESHOLD) {
+        this.log.info(`Recovered state updates for ${deviceId} after ${prevFailures} failed attempts`);
+      }
+      this.readFailures.delete(deviceId);
+
       const devices = response.devices || [];
       const device = devices.find(d => d.serial === deviceId);
       if (!device) {
@@ -135,7 +182,20 @@ export class SelfHostedAPI implements ThermostatApiClient {
       }
       return this.parseDevice(device);
     } catch (error) {
-      this.log.error(`Failed to refresh device ${deviceId}:`, error);
+      const failures = (this.readFailures.get(deviceId) ?? 0) + 1;
+      this.readFailures.set(deviceId, failures);
+      const message = error instanceof Error ? error.message : String(error);
+
+      // Cached state is retained on failure, so don't spam errors for short-lived
+      // upstream blips. Log quietly at first, emit a single warn if it persists.
+      if (failures <= FAILURE_LOG_THRESHOLD) {
+        this.log.debug(`Failed to refresh device ${deviceId} (transient, attempt ${failures}): ${message}`);
+      } else if (failures === FAILURE_LOG_THRESHOLD + 1) {
+        this.log.warn(
+          `Repeated failures refreshing device ${deviceId} — the server appears to be unreachable. ` +
+          `Keeping cached values and suppressing further messages until it recovers. Last error: ${message}`,
+        );
+      }
       return null;
     }
   }

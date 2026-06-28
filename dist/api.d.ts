@@ -69,15 +69,29 @@ export interface ThermostatApiClient {
     readonly supportsLearningMode: boolean;
     readonly sourceLabel: string;
 }
+export declare const RETRYABLE_STATUS: Set<number>;
+export declare const MAX_RETRIES = 2;
+export declare const RETRY_BASE_DELAY_MS = 400;
+export declare const REQUEST_TIMEOUT_MS = 15000;
+export declare const FAILURE_LOG_THRESHOLD = 3;
+export type HttpError = Error & {
+    statusCode?: number;
+};
+export declare function httpError(message: string, statusCode?: number): HttpError;
+export declare function isRetryable(error: unknown): boolean;
+export declare function backoffDelay(attempt: number): number;
+export declare function sleep(ms: number): Promise<void>;
 export declare class NoLongerEvilAPI implements ThermostatApiClient {
     private readonly baseUrl;
     private readonly apiKey;
     private readonly log;
     private readonly isHttps;
+    private readonly readFailures;
     constructor(apiKey: string, log: Logger, serverUrl?: string);
     get sourceLabel(): string;
     get supportsLearningMode(): boolean;
     private request;
+    private requestOnce;
     getDevices(): Promise<ApiDevice[]>;
     getDeviceStatus(deviceId: string): Promise<DeviceStatusResponse>;
     setTemperature(deviceId: string, temperature: number, mode: 'heat' | 'cool'): Promise<void>;

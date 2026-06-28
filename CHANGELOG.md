@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-06-28
+
+### Fixed
+- **Frequent `502` / "Invalid API key" log spam** ([#3](https://github.com/lastowl/homebridge-nolongerevil-nest/issues/3)) — Transient upstream failures while polling no longer flood the Homebridge log
+  - Idempotent `GET` reads now retry with exponential backoff + jitter on transient errors (network/timeout, `408`, `429`, `5xx`, and the intermittent `401`s that occur during upstream incidents)
+  - A failed poll keeps the last-known state and logs at `debug`; a single `warn` is emitted only if failures persist, then suppressed until the API recovers
+  - Added a 15s per-request timeout so a hung connection can no longer stall polling
+
 ## [1.2.1] - 2026-03-07
 
 ### Fixed

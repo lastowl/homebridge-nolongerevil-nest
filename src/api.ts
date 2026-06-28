@@ -84,11 +84,46 @@ export interface ThermostatApiClient {
 
 const HOSTED_API_URL = 'https://nolongerevil.com/api/v1';
 
+// The hosted API occasionally returns transient upstream failures (Cloudflare-style
+// 5xx, rate limiting, and intermittent 401s during those incidents). Idempotent GET
+// reads are retried with backoff before an error is surfaced, which keeps both the
+// polling path and the logs quiet through short-lived blips.
+export const RETRYABLE_STATUS = new Set([401, 408, 429, 500, 502, 503, 504]);
+export const MAX_RETRIES = 2;
+export const RETRY_BASE_DELAY_MS = 400;
+export const REQUEST_TIMEOUT_MS = 15000;
+// Number of consecutive read failures logged quietly (debug) before one warn is emitted.
+export const FAILURE_LOG_THRESHOLD = 3;
+
+export type HttpError = Error & { statusCode?: number };
+
+export function httpError(message: string, statusCode?: number): HttpError {
+  const err = new Error(message) as HttpError;
+  err.statusCode = statusCode;
+  return err;
+}
+
+export function isRetryable(error: unknown): boolean {
+  const status = (error as HttpError).statusCode;
+  // Network/timeout errors carry no status code and are always treated as transient.
+  return status === undefined || RETRYABLE_STATUS.has(status);
+}
+
+export function backoffDelay(attempt: number): number {
+  return RETRY_BASE_DELAY_MS * Math.pow(2, attempt) + Math.floor(Math.random() * RETRY_BASE_DELAY_MS);
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export class NoLongerEvilAPI implements ThermostatApiClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly log: Logger;
   private readonly isHttps: boolean;
+  // Tracks consecutive read failures per device so transient blips stay quiet.
+  private readonly readFailures = new Map<string, number>();
 
   constructor(apiKey: string, log: Logger, serverUrl?: string) {
     // Use custom server URL if provided, otherwise use hosted API
@@ -108,7 +143,31 @@ export class NoLongerEvilAPI implements ThermostatApiClient {
     return false;
   }
 
-  private request<T>(
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.requestOnce<T>(method, path, body);
+      } catch (error) {
+        // Only retry idempotent reads, and only for transient failures.
+        const canRetry = method === 'GET' && attempt < MAX_RETRIES && isRetryable(error);
+        if (!canRetry) {
+          throw error;
+        }
+        const wait = backoffDelay(attempt);
+        this.log.debug(
+          `Request ${method} ${path} failed (${(error as Error).message}); ` +
+          `retrying in ${wait}ms (attempt ${attempt + 2}/${MAX_RETRIES + 1})`,
+        );
+        await sleep(wait);
+      }
+    }
+  }
+
+  private requestOnce<T>(
     method: string,
     path: string,
     body?: unknown,
@@ -146,13 +205,17 @@ export class NoLongerEvilAPI implements ThermostatApiClient {
               resolve(data as unknown as T);
             }
           } else if (res.statusCode === 429) {
-            reject(new Error('Rate limit exceeded. Please wait before making more requests.'));
+            reject(httpError('Rate limit exceeded. Please wait before making more requests.', 429));
           } else if (res.statusCode === 401) {
-            reject(new Error('Invalid API key. Please check your configuration.'));
+            reject(httpError('Invalid API key. Please check your configuration.', 401));
           } else {
-            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+            reject(httpError(`HTTP ${res.statusCode}: ${data}`, res.statusCode));
           }
         });
+      });
+
+      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+        req.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms`));
       });
 
       req.on('error', reject);
@@ -333,9 +396,27 @@ export class NoLongerEvilAPI implements ThermostatApiClient {
   async getThermostatState(deviceId: string): Promise<ThermostatState | null> {
     try {
       const status = await this.getDeviceStatus(deviceId);
+      const prevFailures = this.readFailures.get(deviceId) ?? 0;
+      if (prevFailures > FAILURE_LOG_THRESHOLD) {
+        this.log.info(`Recovered state updates for ${deviceId} after ${prevFailures} failed attempts`);
+      }
+      this.readFailures.delete(deviceId);
       return this.parseDeviceStatus(deviceId, status);
     } catch (error) {
-      this.log.error(`Failed to get state for ${deviceId}:`, error);
+      const failures = (this.readFailures.get(deviceId) ?? 0) + 1;
+      this.readFailures.set(deviceId, failures);
+      const message = error instanceof Error ? error.message : String(error);
+
+      // Cached state is retained on failure, so don't spam errors for short-lived
+      // upstream blips. Log quietly at first, emit a single warn if it persists.
+      if (failures <= FAILURE_LOG_THRESHOLD) {
+        this.log.debug(`Failed to get state for ${deviceId} (transient, attempt ${failures}): ${message}`);
+      } else if (failures === FAILURE_LOG_THRESHOLD + 1) {
+        this.log.warn(
+          `Repeated failures getting state for ${deviceId} — the upstream API appears to be down. ` +
+          `Keeping cached values and suppressing further messages until it recovers. Last error: ${message}`,
+        );
+      }
       return null;
     }
   }

@@ -36,11 +36,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SelfHostedAPI = void 0;
 const https = __importStar(require("https"));
 const http = __importStar(require("http"));
+const api_1 = require("./api");
 class SelfHostedAPI {
     baseUrl;
     apiKey;
     log;
     isHttps;
+    // Tracks consecutive read failures per device so transient blips stay quiet.
+    readFailures = new Map();
     constructor(apiKey, serverUrl, log) {
         this.baseUrl = serverUrl.replace(/\/$/, '');
         this.apiKey = apiKey;
@@ -54,7 +57,25 @@ class SelfHostedAPI {
     get supportsLearningMode() {
         return true;
     }
-    request(method, path, body) {
+    async request(method, path, body) {
+        for (let attempt = 0;; attempt++) {
+            try {
+                return await this.requestOnce(method, path, body);
+            }
+            catch (error) {
+                // Only retry idempotent reads, and only for transient failures.
+                const canRetry = method === 'GET' && attempt < api_1.MAX_RETRIES && (0, api_1.isRetryable)(error);
+                if (!canRetry) {
+                    throw error;
+                }
+                const wait = (0, api_1.backoffDelay)(attempt);
+                this.log.debug(`Request ${method} ${path} failed (${error.message}); ` +
+                    `retrying in ${wait}ms (attempt ${attempt + 2}/${api_1.MAX_RETRIES + 1})`);
+                await (0, api_1.sleep)(wait);
+            }
+        }
+    }
+    requestOnce(method, path, body) {
         return new Promise((resolve, reject) => {
             const fullUrl = `${this.baseUrl}${path}`;
             const url = new URL(fullUrl);
@@ -86,12 +107,15 @@ class SelfHostedAPI {
                         }
                     }
                     else if (res.statusCode === 401) {
-                        reject(new Error('Invalid API key. Please check your self-hosted server configuration.'));
+                        reject((0, api_1.httpError)('Invalid API key. Please check your self-hosted server configuration.', 401));
                     }
                     else {
-                        reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+                        reject((0, api_1.httpError)(`HTTP ${res.statusCode}: ${data}`, res.statusCode));
                     }
                 });
+            });
+            req.setTimeout(api_1.REQUEST_TIMEOUT_MS, () => {
+                req.destroy(new Error(`Request timed out after ${api_1.REQUEST_TIMEOUT_MS}ms`));
             });
             req.on('error', reject);
             if (body) {
@@ -116,6 +140,11 @@ class SelfHostedAPI {
     async getThermostatState(deviceId) {
         try {
             const response = await this.request('GET', '/api/devices');
+            const prevFailures = this.readFailures.get(deviceId) ?? 0;
+            if (prevFailures > api_1.FAILURE_LOG_THRESHOLD) {
+                this.log.info(`Recovered state updates for ${deviceId} after ${prevFailures} failed attempts`);
+            }
+            this.readFailures.delete(deviceId);
             const devices = response.devices || [];
             const device = devices.find(d => d.serial === deviceId);
             if (!device) {
@@ -125,7 +154,18 @@ class SelfHostedAPI {
             return this.parseDevice(device);
         }
         catch (error) {
-            this.log.error(`Failed to refresh device ${deviceId}:`, error);
+            const failures = (this.readFailures.get(deviceId) ?? 0) + 1;
+            this.readFailures.set(deviceId, failures);
+            const message = error instanceof Error ? error.message : String(error);
+            // Cached state is retained on failure, so don't spam errors for short-lived
+            // upstream blips. Log quietly at first, emit a single warn if it persists.
+            if (failures <= api_1.FAILURE_LOG_THRESHOLD) {
+                this.log.debug(`Failed to refresh device ${deviceId} (transient, attempt ${failures}): ${message}`);
+            }
+            else if (failures === api_1.FAILURE_LOG_THRESHOLD + 1) {
+                this.log.warn(`Repeated failures refreshing device ${deviceId} — the server appears to be unreachable. ` +
+                    `Keeping cached values and suppressing further messages until it recovers. Last error: ${message}`);
+            }
             return null;
         }
     }
