@@ -3,34 +3,34 @@ import * as https from 'https';
 import * as http from 'http';
 import { ThermostatApiClient, ThermostatState, ThermostatSchedule } from './api';
 
-// Self-hosted API response types
+// Self-hosted API response types (flat device model from the production
+// NoLongerEvil-SelfHosted server).
 interface SelfHostedDevice {
   serial: string;
-  objects: string[];
-}
-
-interface SelfHostedStatusResponse {
-  devices: string[];
-  deviceState: {
-    [serial: string]: {
-      [objectKey: string]: {
-        serial: string;
-        object_key: string;
-        object_revision: number;
-        object_timestamp: number;
-        value: Record<string, unknown>;
-      };
-    };
+  name?: string | null;
+  mode?: string;
+  current_temperature?: number;
+  target_temperature?: number;
+  target_temperature_low?: number;
+  target_temperature_high?: number;
+  humidity?: number;
+  away?: boolean;
+  hvac?: {
+    heater?: boolean;
+    ac?: boolean;
+  };
+  capabilities?: {
+    can_heat?: boolean;
+    can_cool?: boolean;
   };
 }
 
-interface CommandResponse {
-  success: boolean;
-  message: string;
-  device: string;
-  object: string;
-  revision: number;
-  timestamp: number;
+interface DevicesResponse {
+  devices?: SelfHostedDevice[];
+}
+
+interface ScheduleResponse {
+  schedule?: ThermostatSchedule | null;
 }
 
 export class SelfHostedAPI implements ThermostatApiClient {
@@ -113,21 +113,11 @@ export class SelfHostedAPI implements ThermostatApiClient {
 
   async getThermostatStates(): Promise<ThermostatState[]> {
     try {
-      const devices = await this.request<SelfHostedDevice[]>('GET', '/api/devices');
-      const states: ThermostatState[] = [];
-
-      for (const device of devices) {
-        try {
-          const state = await this.getThermostatState(device.serial);
-          if (state) {
-            states.push(state);
-          }
-        } catch (error) {
-          this.log.error(`Failed to get status for device ${device.serial}:`, error);
-        }
-      }
-
-      return states;
+      const response = await this.request<DevicesResponse>('GET', '/api/devices');
+      const devices = response.devices || [];
+      return devices
+        .map(device => this.parseDevice(device))
+        .filter((state): state is ThermostatState => state !== null);
     } catch (error) {
       this.log.error('Failed to get thermostat states from self-hosted server:', error);
       return [];
@@ -135,128 +125,35 @@ export class SelfHostedAPI implements ThermostatApiClient {
   }
 
   async getThermostatState(deviceId: string): Promise<ThermostatState | null> {
-    // deviceId is the serial for self-hosted
-    const serial = deviceId;
     try {
-      const response = await this.request<SelfHostedStatusResponse>(
-        'GET',
-        `/status?serial=${encodeURIComponent(serial)}`,
-      );
-      return this.parseStatus(serial, response);
+      const response = await this.request<DevicesResponse>('GET', '/api/devices');
+      const devices = response.devices || [];
+      const device = devices.find(d => d.serial === deviceId);
+      if (!device) {
+        this.log.warn(`Device ${deviceId} not found during refresh`);
+        return null;
+      }
+      return this.parseDevice(device);
     } catch (error) {
-      this.log.error(`Failed to get state for ${serial}:`, error);
+      this.log.error(`Failed to refresh device ${deviceId}:`, error);
       return null;
     }
   }
 
-  async setTemperature(
-    deviceId: string,
-    temperature: number,
-    mode: 'heat' | 'cool',
-  ): Promise<void> {
-    await this.request<CommandResponse>('POST', '/command', {
-      serial: deviceId,
-      action: 'temp',
-      value: temperature,
-      mode,
-    });
-  }
-
-  async setTemperatureRange(
-    deviceId: string,
-    lowTemperature: number,
-    highTemperature: number,
-  ): Promise<void> {
-    await this.request<CommandResponse>('POST', '/command', {
-      serial: deviceId,
-      action: 'temp',
-      mode: 'range',
-      target_temperature_low: lowTemperature,
-      target_temperature_high: highTemperature,
-    });
-  }
-
-  async setMode(deviceId: string, mode: 'off' | 'heat' | 'cool' | 'heat-cool'): Promise<void> {
-    // Translate heat-cool -> range for the self-hosted API
-    const apiMode = mode === 'heat-cool' ? 'range' : mode;
-    await this.request<CommandResponse>('POST', '/command', {
-      serial: deviceId,
-      action: 'set',
-      field: 'target_temperature_type',
-      value: apiMode,
-    });
-  }
-
-  async setAwayMode(deviceId: string, away: boolean): Promise<void> {
-    await this.request<CommandResponse>('POST', '/command', {
-      serial: deviceId,
-      action: 'away',
-      value: away,
-    });
-  }
-
-  async getSchedule(_deviceId: string): Promise<ThermostatSchedule | null> {
-    this.log.warn('Schedule management is not supported on self-hosted servers');
-    return null;
-  }
-
-  async setSchedule(_deviceId: string, _schedule: ThermostatSchedule): Promise<void> {
-    this.log.warn('Schedule management is not supported on self-hosted servers');
-  }
-
-  async clearSchedule(_deviceId: string): Promise<void> {
-    this.log.warn('Schedule management is not supported on self-hosted servers');
-  }
-
-  async setLearningMode(deviceId: string, enabled: boolean): Promise<void> {
-    // Nest thermostats use 'learning_mode' in device.{serial}
-    // Some firmware versions also use 'auto_schedule_enable'
-    try {
-      await this.request<CommandResponse>('POST', '/command', {
-        serial: deviceId,
-        action: 'set',
-        field: 'learning_mode',
-        value: enabled,
-      });
-    } catch (error) {
-      this.log.debug('Failed to set learning_mode, trying auto_schedule_enable:', error);
-    }
-
-    try {
-      await this.request<CommandResponse>('POST', '/command', {
-        serial: deviceId,
-        action: 'set',
-        field: 'auto_schedule_enable',
-        value: enabled,
-      });
-    } catch (error) {
-      this.log.debug('Failed to set auto_schedule_enable:', error);
-    }
-  }
-
-  private parseStatus(serial: string, response: SelfHostedStatusResponse): ThermostatState | null {
-    const deviceState = response.deviceState?.[serial];
-    if (!deviceState) {
-      this.log.warn(`No state data found for device ${serial}`);
+  private parseDevice(device: SelfHostedDevice): ThermostatState | null {
+    if (!device || !device.serial) {
       return null;
     }
 
-    const sharedKey = `shared.${serial}`;
-    const deviceKey = `device.${serial}`;
+    const serial = device.serial;
+    const currentTemp = device.current_temperature ?? 20;
+    const targetTemp = Math.max(device.target_temperature ?? 20, 10);
+    const targetTempLow = Math.max(device.target_temperature_low ?? 18, 10);
+    const targetTempHigh = Math.max(device.target_temperature_high ?? 24, 10);
 
-    const shared = deviceState[sharedKey]?.value || {};
-    const device = deviceState[deviceKey]?.value || {};
-
-    // Temperature values are in Celsius
-    const currentTemp = (shared['current_temperature'] as number) ?? 20;
-    const targetTemp = (shared['target_temperature'] as number) ?? 20;
-    const targetTempLow = (shared['target_temperature_low'] as number) ?? 18;
-    const targetTempHigh = (shared['target_temperature_high'] as number) ?? 24;
-
-    // HVAC mode mapping (self-hosted uses 'range' instead of 'heat-cool')
-    const tempType = (shared['target_temperature_type'] as string) || 'off';
+    // HVAC Mode mapping
     let hvacMode: ThermostatState['hvacMode'] = 'off';
-    switch (tempType) {
+    switch (device.mode) {
       case 'heat':
         hvacMode = 'heat';
         break;
@@ -264,37 +161,29 @@ export class SelfHostedAPI implements ThermostatApiClient {
         hvacMode = 'cool';
         break;
       case 'range':
+      case 'heat-cool':
         hvacMode = 'heat-cool';
         break;
-      case 'off':
       default:
         hvacMode = 'off';
     }
 
     // HVAC state (what's currently running)
     let hvacState: ThermostatState['hvacState'] = 'off';
-    if (shared['hvac_heater_state'] === true) {
+    if (device.hvac?.heater) {
       hvacState = 'heating';
-    } else if (shared['hvac_ac_state'] === true) {
+    } else if (device.hvac?.ac) {
       hvacState = 'cooling';
     }
 
-    // Away mode (0 = home, 2 = away)
-    const awayValue = shared['auto_away'] as number;
-    const awayMode = awayValue === 2;
-
-    // Humidity
-    const humidity = (device['current_humidity'] as number) ?? 50;
-
-    // Device capabilities
-    const canHeat = (shared['can_heat'] as boolean) ?? true;
-    const canCool = (shared['can_cool'] as boolean) ?? false;
-
-    // Self-hosted doesn't provide a name in the device list
-    const name = (shared['name'] as string) || `Nest ${serial.slice(-4)}`;
+    const humidity = device.humidity ?? 50;
+    const awayMode = device.away ?? false;
+    const canHeat = device.capabilities?.can_heat ?? true;
+    const canCool = device.capabilities?.can_cool ?? false;
+    const name = device.name || `Nest ${serial.slice(-4)}`;
 
     return {
-      deviceId: serial, // self-hosted uses serial as the device identifier
+      deviceId: serial,
       serial,
       currentTemperature: currentTemp,
       targetTemperature: targetTemp,
@@ -308,5 +197,84 @@ export class SelfHostedAPI implements ThermostatApiClient {
       canCool,
       name,
     };
+  }
+
+  async setTemperature(deviceId: string, temperature: number, _mode: 'heat' | 'cool'): Promise<void> {
+    await this.request('POST', '/command', {
+      serial: deviceId,
+      command: 'set_temperature',
+      value: temperature,
+    });
+  }
+
+  async setTemperatureRange(deviceId: string, lowTemperature: number, highTemperature: number): Promise<void> {
+    await this.request('POST', '/command', {
+      serial: deviceId,
+      command: 'set_temperature',
+      value: {
+        low: lowTemperature,
+        high: highTemperature,
+      },
+    });
+  }
+
+  async setMode(deviceId: string, mode: 'off' | 'heat' | 'cool' | 'heat-cool'): Promise<void> {
+    await this.request('POST', '/command', {
+      serial: deviceId,
+      command: 'set_mode',
+      value: mode,
+    });
+  }
+
+  async setAwayMode(deviceId: string, away: boolean): Promise<void> {
+    await this.request('POST', '/command', {
+      serial: deviceId,
+      command: 'set_away',
+      value: away,
+    });
+  }
+
+  async getSchedule(deviceId: string): Promise<ThermostatSchedule | null> {
+    try {
+      const response = await this.request<ScheduleResponse>('GET', `/api/schedule?serial=${encodeURIComponent(deviceId)}`);
+      return response.schedule ?? null;
+    } catch (error) {
+      this.log.error(`Failed to get schedule for ${deviceId}:`, error);
+      return null;
+    }
+  }
+
+  async setSchedule(deviceId: string, schedule: ThermostatSchedule): Promise<void> {
+    await this.request('POST', '/command', {
+      serial: deviceId,
+      command: 'set_schedule',
+      value: schedule,
+    });
+  }
+
+  async clearSchedule(deviceId: string): Promise<void> {
+    const emptySchedule: ThermostatSchedule = {
+      ver: 2,
+      days: {},
+      name: 'Cleared',
+      schedule_mode: 'HEAT',
+    };
+    await this.request('POST', '/command', {
+      serial: deviceId,
+      command: 'set_schedule',
+      value: emptySchedule,
+    });
+  }
+
+  async setLearningMode(deviceId: string, enabled: boolean): Promise<void> {
+    try {
+      await this.request('POST', '/command', {
+        serial: deviceId,
+        command: 'set_device_setting',
+        value: { learning_mode: enabled },
+      });
+    } catch (error) {
+      this.log.debug('Failed to set learning mode:', error);
+    }
   }
 }

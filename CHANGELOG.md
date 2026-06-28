@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-03-07
+
+### Fixed
+- **Self-hosted API rewrite** — Aligned with the production NoLongerEvil-SelfHosted server API (thanks @roberto-montanari, [#2](https://github.com/lastowl/homebridge-nolongerevil-nest/issues/2))
+  - Use flat device model from `GET /api/devices` instead of nested shared/device state objects
+  - Use command-based API (`set_temperature`, `set_mode`, `set_away`, `set_schedule`) matching the production server
+  - Schedule read now uses `GET /api/schedule?serial=X` endpoint
+  - Learning mode uses `set_device_setting` command with whitelisted device fields
+
 ## [1.2.0] - 2026-03-07
 
 ### Added
