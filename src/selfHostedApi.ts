@@ -29,11 +29,15 @@ interface SelfHostedDevice {
   hvac?: {
     heater?: boolean;
     ac?: boolean;
+    fan?: boolean;
   };
   capabilities?: {
     can_heat?: boolean;
     can_cool?: boolean;
+    has_fan?: boolean;
   };
+  fan_timer_active?: boolean;
+  fan_timer_timeout?: number;
 }
 
 interface DevicesResponse {
@@ -66,6 +70,10 @@ export class SelfHostedAPI implements ThermostatApiClient {
   }
 
   get supportsLearningMode(): boolean {
+    return true;
+  }
+
+  get supportsFanControl(): boolean {
     return true;
   }
 
@@ -240,6 +248,10 @@ export class SelfHostedAPI implements ThermostatApiClient {
     const awayMode = device.away ?? false;
     const canHeat = device.capabilities?.can_heat ?? true;
     const canCool = device.capabilities?.can_cool ?? false;
+    const hasFan = device.capabilities?.has_fan ?? false;
+    const fanActive = device.fan_timer_active === true
+      || (device.fan_timer_timeout ?? 0) > Math.floor(Date.now() / 1000);
+    const fanRunning = device.hvac?.fan ?? false;
     const name = device.name || `Nest ${serial.slice(-4)}`;
 
     return {
@@ -255,11 +267,15 @@ export class SelfHostedAPI implements ThermostatApiClient {
       awayMode,
       canHeat,
       canCool,
+      hasFan,
+      fanActive,
+      fanRunning,
       name,
     };
   }
 
-  async setTemperature(deviceId: string, temperature: number, _mode: 'heat' | 'cool'): Promise<void> {
+  async setTemperature(deviceId: string, temperature: number, mode: 'heat' | 'cool'): Promise<void> {
+    void mode;
     await this.request('POST', '/command', {
       serial: deviceId,
       command: 'set_temperature',
@@ -336,5 +352,13 @@ export class SelfHostedAPI implements ThermostatApiClient {
     } catch (error) {
       this.log.debug('Failed to set learning mode:', error);
     }
+  }
+
+  async setFanActive(deviceId: string, active: boolean): Promise<void> {
+    await this.request('POST', '/command', {
+      serial: deviceId,
+      command: 'set_fan',
+      value: active ? 'on' : 'auto',
+    });
   }
 }

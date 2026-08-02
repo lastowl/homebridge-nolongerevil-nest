@@ -88,6 +88,9 @@ class NoLongerEvilAPI {
     get supportsLearningMode() {
         return false;
     }
+    get supportsFanControl() {
+        return false;
+    }
     async request(method, path, body) {
         for (let attempt = 0;; attempt++) {
             try {
@@ -211,8 +214,15 @@ class NoLongerEvilAPI {
         };
         await this.request('PUT', `/thermostat/${deviceId}/schedule`, { schedule: emptySchedule });
     }
-    async setLearningMode(_deviceId, _enabled) {
+    async setLearningMode(deviceId, enabled) {
+        void deviceId;
+        void enabled;
         this.log.warn('Learning mode control is not available on the hosted API');
+    }
+    async setFanActive(deviceId, active) {
+        void deviceId;
+        void active;
+        this.log.warn('Fan control is not available on the hosted API');
     }
     parseDeviceStatus(deviceId, response) {
         const serial = response.device.serial;
@@ -273,6 +283,9 @@ class NoLongerEvilAPI {
             awayMode,
             canHeat,
             canCool,
+            hasFan: false,
+            fanActive: false,
+            fanRunning: false,
             name,
         };
     }

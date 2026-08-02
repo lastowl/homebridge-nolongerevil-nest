@@ -57,6 +57,9 @@ class SelfHostedAPI {
     get supportsLearningMode() {
         return true;
     }
+    get supportsFanControl() {
+        return true;
+    }
     async request(method, path, body) {
         for (let attempt = 0;; attempt++) {
             try {
@@ -206,6 +209,10 @@ class SelfHostedAPI {
         const awayMode = device.away ?? false;
         const canHeat = device.capabilities?.can_heat ?? true;
         const canCool = device.capabilities?.can_cool ?? false;
+        const hasFan = device.capabilities?.has_fan ?? false;
+        const fanActive = device.fan_timer_active === true
+            || (device.fan_timer_timeout ?? 0) > Math.floor(Date.now() / 1000);
+        const fanRunning = device.hvac?.fan ?? false;
         const name = device.name || `Nest ${serial.slice(-4)}`;
         return {
             deviceId: serial,
@@ -220,10 +227,14 @@ class SelfHostedAPI {
             awayMode,
             canHeat,
             canCool,
+            hasFan,
+            fanActive,
+            fanRunning,
             name,
         };
     }
-    async setTemperature(deviceId, temperature, _mode) {
+    async setTemperature(deviceId, temperature, mode) {
+        void mode;
         await this.request('POST', '/command', {
             serial: deviceId,
             command: 'set_temperature',
@@ -295,6 +306,13 @@ class SelfHostedAPI {
         catch (error) {
             this.log.debug('Failed to set learning mode:', error);
         }
+    }
+    async setFanActive(deviceId, active) {
+        await this.request('POST', '/command', {
+            serial: deviceId,
+            command: 'set_fan',
+            value: active ? 'on' : 'auto',
+        });
     }
 }
 exports.SelfHostedAPI = SelfHostedAPI;

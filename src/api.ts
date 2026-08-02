@@ -40,6 +40,9 @@ export interface ThermostatState {
   awayMode: boolean;
   canHeat: boolean;
   canCool: boolean;
+  hasFan: boolean;
+  fanActive: boolean;
+  fanRunning: boolean;
   name: string;
 }
 
@@ -78,7 +81,9 @@ export interface ThermostatApiClient {
   setSchedule(deviceId: string, schedule: ThermostatSchedule): Promise<void>;
   clearSchedule(deviceId: string): Promise<void>;
   setLearningMode(deviceId: string, enabled: boolean): Promise<void>;
+  setFanActive(deviceId: string, active: boolean): Promise<void>;
   readonly supportsLearningMode: boolean;
+  readonly supportsFanControl: boolean;
   readonly sourceLabel: string;
 }
 
@@ -140,6 +145,10 @@ export class NoLongerEvilAPI implements ThermostatApiClient {
   }
 
   get supportsLearningMode(): boolean {
+    return false;
+  }
+
+  get supportsFanControl(): boolean {
     return false;
   }
 
@@ -297,8 +306,16 @@ export class NoLongerEvilAPI implements ThermostatApiClient {
     await this.request('PUT', `/thermostat/${deviceId}/schedule`, { schedule: emptySchedule });
   }
 
-  async setLearningMode(_deviceId: string, _enabled: boolean): Promise<void> {
+  async setLearningMode(deviceId: string, enabled: boolean): Promise<void> {
+    void deviceId;
+    void enabled;
     this.log.warn('Learning mode control is not available on the hosted API');
+  }
+
+  async setFanActive(deviceId: string, active: boolean): Promise<void> {
+    void deviceId;
+    void active;
+    this.log.warn('Fan control is not available on the hosted API');
   }
 
   parseDeviceStatus(deviceId: string, response: DeviceStatusResponse): ThermostatState {
@@ -368,6 +385,9 @@ export class NoLongerEvilAPI implements ThermostatApiClient {
       awayMode,
       canHeat,
       canCool,
+      hasFan: false,
+      fanActive: false,
+      fanRunning: false,
       name,
     };
   }

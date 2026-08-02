@@ -7,12 +7,14 @@ export declare class NestThermostatAccessory {
     private readonly thermostatService;
     private readonly humidityService;
     private scheduleSwitch?;
+    private fanService?;
     private state;
     private readonly pollInterval;
     private pollTimer?;
     private readonly apiClient;
     private smartScheduleEnabled;
     constructor(platform: NoLongerEvilPlatform, accessory: PlatformAccessory, initialState: ThermostatState, apiClient: ThermostatApiClient);
+    private setupFanService;
     private setupScheduleSwitch;
     private initScheduleState;
     private setSmartSchedule;
@@ -34,4 +36,7 @@ export declare class NestThermostatAccessory {
     getHeatingThresholdTemperature(): CharacteristicValue;
     setHeatingThresholdTemperature(value: CharacteristicValue): Promise<void>;
     getCurrentHumidity(): CharacteristicValue;
+    getFanActive(): CharacteristicValue;
+    getCurrentFanState(): CharacteristicValue;
+    setFanActive(value: CharacteristicValue): Promise<void>;
 }

@@ -10,6 +10,7 @@ export class NestThermostatAccessory {
   private readonly thermostatService: Service;
   private readonly humidityService: Service;
   private scheduleSwitch?: Service;
+  private fanService?: Service;
 
   private state: ThermostatState;
   private readonly pollInterval: number;
@@ -107,8 +108,39 @@ export class NestThermostatAccessory {
       this.setupScheduleSwitch();
     }
 
+    this.setupFanService();
+
     // Start polling for updates
     this.startPolling();
+  }
+
+  private setupFanService(): void {
+    const existingFanService = this.accessory.getServiceById(
+      this.platform.Service.Fanv2,
+      'fan',
+    );
+
+    if (!this.state.hasFan || !this.apiClient.supportsFanControl) {
+      if (existingFanService) {
+        this.accessory.removeService(existingFanService);
+      }
+      return;
+    }
+
+    this.fanService = existingFanService
+      || this.accessory.addService(this.platform.Service.Fanv2, `${this.state.name} Fan`, 'fan');
+
+    this.fanService.setCharacteristic(
+      this.platform.Characteristic.Name,
+      `${this.state.name} Fan`,
+    );
+
+    this.fanService.getCharacteristic(this.platform.Characteristic.Active)
+      .onGet(this.getFanActive.bind(this))
+      .onSet(this.setFanActive.bind(this));
+
+    this.fanService.getCharacteristic(this.platform.Characteristic.CurrentFanState)
+      .onGet(this.getCurrentFanState.bind(this));
   }
 
   private setupScheduleSwitch(): void {
@@ -227,6 +259,16 @@ export class NestThermostatAccessory {
     this.humidityService.updateCharacteristic(
       this.platform.Characteristic.CurrentRelativeHumidity,
       this.state.humidity,
+    );
+
+    this.fanService?.updateCharacteristic(
+      this.platform.Characteristic.Active,
+      this.getFanActive(),
+    );
+
+    this.fanService?.updateCharacteristic(
+      this.platform.Characteristic.CurrentFanState,
+      this.getCurrentFanState(),
     );
   }
 
@@ -385,5 +427,32 @@ export class NestThermostatAccessory {
 
   getCurrentHumidity(): CharacteristicValue {
     return this.state.humidity;
+  }
+
+  getFanActive(): CharacteristicValue {
+    return this.state.fanActive
+      ? this.platform.Characteristic.Active.ACTIVE
+      : this.platform.Characteristic.Active.INACTIVE;
+  }
+
+  getCurrentFanState(): CharacteristicValue {
+    return this.state.fanRunning
+      ? this.platform.Characteristic.CurrentFanState.BLOWING_AIR
+      : this.platform.Characteristic.CurrentFanState.INACTIVE;
+  }
+
+  async setFanActive(value: CharacteristicValue): Promise<void> {
+    const active = value === this.platform.Characteristic.Active.ACTIVE;
+    this.platform.log.info(`Setting ${this.state.name} fan to ${active ? 'on' : 'auto'}`);
+
+    try {
+      await this.apiClient.setFanActive(this.state.deviceId, active);
+      this.state.fanActive = active;
+    } catch (error) {
+      this.platform.log.error('Failed to set fan mode:', error);
+      throw new this.platform.api.hap.HapStatusError(
+        this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE,
+      );
+    }
   }
 }

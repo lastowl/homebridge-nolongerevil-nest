@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Expose a HomeKit fan service for self-hosted thermostats that report fan capability.
+- Map HomeKit fan On/Off to NLE's timed fan On/Auto control while reporting the actual blower state separately.
+
 All notable changes to this project will be documented in this file.
 
 ## [1.2.2] - 2026-06-28

@@ -33,6 +33,9 @@ export interface ThermostatState {
     awayMode: boolean;
     canHeat: boolean;
     canCool: boolean;
+    hasFan: boolean;
+    fanActive: boolean;
+    fanRunning: boolean;
     name: string;
 }
 export interface ScheduleEntry {
@@ -66,7 +69,9 @@ export interface ThermostatApiClient {
     setSchedule(deviceId: string, schedule: ThermostatSchedule): Promise<void>;
     clearSchedule(deviceId: string): Promise<void>;
     setLearningMode(deviceId: string, enabled: boolean): Promise<void>;
+    setFanActive(deviceId: string, active: boolean): Promise<void>;
     readonly supportsLearningMode: boolean;
+    readonly supportsFanControl: boolean;
     readonly sourceLabel: string;
 }
 export declare const RETRYABLE_STATUS: Set<number>;
@@ -90,6 +95,7 @@ export declare class NoLongerEvilAPI implements ThermostatApiClient {
     constructor(apiKey: string, log: Logger, serverUrl?: string);
     get sourceLabel(): string;
     get supportsLearningMode(): boolean;
+    get supportsFanControl(): boolean;
     private request;
     private requestOnce;
     getDevices(): Promise<ApiDevice[]>;
@@ -101,7 +107,8 @@ export declare class NoLongerEvilAPI implements ThermostatApiClient {
     getSchedule(deviceId: string): Promise<ThermostatSchedule | null>;
     setSchedule(deviceId: string, schedule: ThermostatSchedule): Promise<void>;
     clearSchedule(deviceId: string): Promise<void>;
-    setLearningMode(_deviceId: string, _enabled: boolean): Promise<void>;
+    setLearningMode(deviceId: string, enabled: boolean): Promise<void>;
+    setFanActive(deviceId: string, active: boolean): Promise<void>;
     parseDeviceStatus(deviceId: string, response: DeviceStatusResponse): ThermostatState;
     getThermostatStates(): Promise<ThermostatState[]>;
     getThermostatState(deviceId: string): Promise<ThermostatState | null>;
