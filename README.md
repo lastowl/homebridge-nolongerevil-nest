@@ -13,6 +13,7 @@ NoLongerEvil is a project that revives bricked or abandoned Nest Gen 1 & 2 therm
 - **Thermostat Control** — Set target temperature, switch between heating, cooling, auto, and off modes
 - **Temperature Range** — Set heating and cooling thresholds for auto mode
 - **Humidity Sensor** — View current relative humidity
+- **Fan Control** — Start a timed fan cycle or return the fan to automatic control (self-hosted thermostats with fan capability)
 - **Smart Schedule Switch** — Enable or disable the Nest's built-in schedule from HomeKit
 - **Schedule Editor** — View and edit the weekly thermostat schedule from the Homebridge UI
 - **Learning Mode Control** — Automatically disables the Nest's auto-schedule learning when the smart schedule is turned off (self-hosted)
@@ -125,7 +126,16 @@ Each thermostat appears in HomeKit with:
 
 - **Thermostat** — Current temperature, target temperature, HVAC mode (Off / Heat / Cool / Auto), and heating/cooling thresholds for auto mode
 - **Humidity Sensor** — Current relative humidity
+- **Fan** — Start a timed fan cycle, return to automatic control, and view whether the blower is currently running (self-hosted only)
 - **Smart Schedule Switch** — Toggle the Nest's built-in schedule on or off
+
+### Fan Control
+
+For self-hosted NLE servers, thermostats that report `has_fan` expose a separate
+HomeKit fan service. Turning it on starts NLE's configured fan timer (60 minutes
+by default); turning it off returns the thermostat to automatic fan control.
+HomeKit also reports the blower's current running state independently from the
+timer setting.
 
 ### Smart Schedule Switch
 
